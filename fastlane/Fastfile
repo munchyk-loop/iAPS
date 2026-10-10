@@ -83,7 +83,7 @@ platform :ios do
     # match downloads/creates profiles but does not validate their entitlements, so a
     # missing App Group otherwise only surfaces ~10 min later in `gym` as a cryptic
     # "Provisioning profile ... doesn't support the ... App Group" xcodebuild error.
-    app_group_id = "group.com.#{TEAMID}.loopkit.LoopGroup"
+    app_group_id = "group.com.M9J3GCND88.iaps.iaps-group"
     [
       "#{APP_IDENTIFIER}",
       "#{APP_IDENTIFIER}.watchkitapp",
@@ -99,7 +99,7 @@ platform :ios do
       unless groups.include?(app_group_id)
         UI.user_error!(
           "The provisioning profile for #{id} does not include the App Group #{app_group_id}. " \
-          "Assign it in the Apple Developer portal (Identifiers -> #{id} -> App Groups -> Configure -> select \"Loop App Group\"), " \
+          "Assign it in the Apple Developer portal (Identifiers -> #{id} -> App Groups -> Configure -> select \"iAPS App Group\"), " \
           "then run the build again: assigning the App Group invalidates the old profile, so it is normally regenerated automatically. " \
           "If the build still fails with this error, delete AppStore_#{id}.mobileprovision from your Match-Secrets repo to force a fresh profile, then build again. " \
           "See the \"Add App Group to Bundle Identifiers\" section in fastlane/testflight.md."
