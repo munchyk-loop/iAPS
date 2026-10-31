@@ -660,6 +660,24 @@ Enact a temp Basal or a temp target */
 /* When bolusing */
 "Bolusing" = "Bolusing";
 
+/* Bolus progress bar title while the pump cancels the bolus */
+"Cancelling" = "Cancelling";
+
+/* Bolus progress bar title while the pump starts the bolus */
+"Starting bolus" = "Starting bolus";
+
+/* Bolus progress bar: the bolus cancel failed */
+"Cancel failed - tap to retry" = "Cancel failed - tap to retry";
+
+/* Bolus progress bar: the pump didn't confirm the bolus cancel in time */
+"Cancel not confirmed - tap to retry" = "Cancel not confirmed - tap to retry";
+
+/* Bolus progress bar: the bolus cancel failed, and the bolus has ended since */
+"Cancel failed - check the pump" = "Cancel failed - check the pump";
+
+/* Bolus progress bar: the pump didn't confirm the bolus cancel in time, and the bolus has ended since */
+"Cancel not confirmed - check the pump" = "Cancel not confirmed - check the pump";
+
 /* */
 "Pump suspended" = "Pump suspended";
 
@@ -2200,6 +2218,7 @@ Enact a temp Basal or a temp target */
 "Override Max IOB" = "Override Max IOB";
 
 /* */
+"When run to completion schedule a consecutive override preset:" = "When run to completion schedule a consecutive override preset:";
 
 /* */
 "Save as Profile" = "Save as Profile";
@@ -2693,7 +2712,31 @@ Enact a temp Basal or a temp target */
 "Experimental" = "Experimental";
     
 /* Smoothing of CGM readings */
-"Smooth Glucose Value" = "Smooth Glucose Value";
+"Smoothing" = "Smoothing";
+"Algorithm" = "Algorithm";
+"Passes" = "Passes";
+"Responsiveness" = "Responsiveness";
+
+/* Glucose smoothing algorithm */
+"No smoothing" = "No smoothing";
+"Savitzky-Golay" = "Savitzky-Golay";
+"Kalman filter" = "Kalman filter";
+"Exponential" = "Exponential";
+
+/* Kalman responsiveness */
+"Calm" = "Calm";
+"Balanced" = "Balanced";
+"Responsive" = "Responsive";
+
+/* Glucose smoothing algorithm description */
+"Glucose is used exactly as the CGM reports it." = "Glucose is used exactly as the CGM reports it.";
+"The smoothing used by older iAPS versions, which always ran it with 3 passes. Fits a curve through a window of about 30 minutes around each reading." = "The smoothing used by older iAPS versions, which always ran it with 3 passes. Fits a curve through a window of about 30 minutes around each reading.";
+"Tracks glucose and how fast it is changing, along with how sure it is of each. Ignores single readings that disagree with the trend, but follows genuine fast rises and falls." = "Tracks glucose and how fast it is changing, along with how sure it is of each. Ignores single readings that disagree with the trend, but follows genuine fast rises and falls.";
+"Each reading is blended into two running averages, a plain one and one that follows the current trend, which counts for 60 percent of the result. The simplest option, and the only one that never revises an earlier reading - so older values on the chart lag behind the raw ones." = "Each reading is blended into two running averages, a plain one and one that follows the current trend, which counts for 60 percent of the result. The simplest option, and the only one that never revises an earlier reading - so older values on the chart lag behind the raw ones.";
+
+/* Glucose smoothing algorithm options description */
+"Each extra pass widens the window the curve is fitted over: a little less noise, but sharp peaks and dips are flattened more." = "Each extra pass widens the window the curve is fitted over: a little less noise, but sharp peaks and dips are flattened more.";
+"How readily the filter gives up its own trend to follow the readings. Calmer is smoother, but the newest reading lags further behind a sharp turn." = "How readily the filter gives up its own trend to follow the readings. Calmer is smoother, but the newest reading lags further behind a sharp turn.";
 
 /* ------------------------------------------- Sharing -------------------------------------------------------*/
 
@@ -3132,6 +3175,12 @@ Enact a temp Basal or a temp target */
 
 /* */
 "Enables the BG acceleration adaptions, adjusting ISF for accelerating/decelerating blood glucose." = "Enables the BG acceleration adaptions, adjusting ISF for accelerating/decelerating blood glucose.";
+
+/* */
+"Use 1-minute readings" = "Use 1-minute readings";
+
+/* */
+"Lets Auto ISF read the 1-minute glucose stream from your CGM instead of the 5-minute one. Only Auto ISF is affected." = "Lets Auto ISF read the 1-minute glucose stream from your CGM instead of the 5-minute one. Only Auto ISF is affected.";
 
 /* */
 "Override Auto ISF" = "Override Auto ISF";
@@ -4324,3 +4373,40 @@ Enact a temp Basal or a temp target */
 "Above the glucose" = "Above the glucose";
 
 "Below the glucose" = "Below the glucose";
+
+/* Build expiration alert message for an Xcode-installed build, singular day; %1$@ is the date, %2$d the days remaining */
+"Your iAPS build expires on %1$@ (%2$d day remaining). Builds installed with Xcode last as long as their signing profile — rebuild and reinstall to renew." = "Your iAPS build expires on %1$@ (%2$d day remaining). Builds installed with Xcode last as long as their signing profile — rebuild and reinstall to renew.";
+
+/* Build expiration alert message for an Xcode-installed build, plural days; %1$@ is the date, %2$d the days remaining */
+"Your iAPS build expires on %1$@ (%2$d days remaining). Builds installed with Xcode last as long as their signing profile — rebuild and reinstall to renew." = "Your iAPS build expires on %1$@ (%2$d days remaining). Builds installed with Xcode last as long as their signing profile — rebuild and reinstall to renew.";
+
+/* Restore: the typed recovery token is not a UUID */
+"That isn't a recovery token. A token is 36 characters with dashes, like 1a2b3c4d-5e6f-…; copy it from your old phone under iAPS → Settings → Sharing." = "That isn't a recovery token. A token is 36 characters with dashes, like 1a2b3c4d-5e6f-…; copy it from your old phone under iAPS → Settings → Sharing.";
+
+/* Title of the newer-release alert on Home */
+"Update available" = "Update available";
+
+/* Dismiss the newer-release alert */
+"Later" = "Later";
+
+/* Open the release highlights page */
+"What's new" = "What's new";
+
+/* Body of the newer-release alert, %1$@ new version, %2$@ running version */
+"iAPS %@ is available. You are running %@. Releases carry dosing and safety fixes; see what changed before you update." = "iAPS %@ is available. You are running %@. Releases carry dosing and safety fixes; see what changed before you update.";
+
+/* Home banner, %1$@ new version, %2$@ running version */
+"iAPS %@ is available. You are running %@." = "iAPS %@ is available. You are running %@.";
+
+/* --- Sharing: crash reports (opt-in, independent of the other sharing toggles) --- */
+"Crash Reports" = "Crash Reports";
+"Send crash reports" = "Send crash reports";
+"If iAPS crashes, send the developers a report of where it happened. Anonymous, no glucose or settings. Off by default." = "If iAPS crashes, send the developers a report of where it happened. Anonymous, no glucose or settings. Off by default.";
+"What a crash report contains" = "What a crash report contains";
+"When iAPS crashes, a report is saved on your phone and sent to open-iaps.app the next time the app starts. It contains the code path that crashed (function names and addresses), the state of each thread, the error message the app stopped with, your phone model, iOS version and iAPS version.\n\nIt does not contain glucose readings, insulin or settings; the raw memory KSCrash captures is removed before anything is sent. It is filed under the same anonymous id as statistics.\n\nReports are only sent from the latest main and dev releases — older versions may crash on bugs already fixed. Nothing else needs to be turned on for this to help." = "When iAPS crashes, a report is saved on your phone and sent to open-iaps.app the next time the app starts. It contains the code path that crashed (function names and addresses), the state of each thread, the error message the app stopped with, your phone model, iOS version and iAPS version.\n\nIt does not contain glucose readings, insulin or settings; the raw memory KSCrash captures is removed before anything is sent. It is filed under the same anonymous id as statistics.\n\nReports are only sent from the latest main and dev releases — older versions may crash on bugs already fixed. Nothing else needs to be turned on for this to help.";
+
+/* --- Settings → Debug options: crash reporting test hook --- */
+"Simulate a crash" = "Simulate a crash";
+"Crash" = "Crash";
+"Simulate a crash?" = "Simulate a crash?";
+"iAPS will stop immediately and must be reopened. If \"Send crash reports\" is on in Sharing, the report is sent at the next start." = "iAPS will stop immediately and must be reopened. If \"Send crash reports\" is on in Sharing, the report is sent at the next start.";

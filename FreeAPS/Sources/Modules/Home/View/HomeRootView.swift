@@ -233,7 +233,7 @@ extension Home {
                     Divider()
                     HStack {
                         if state.carbButton {
-                            Button { state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
+                            Button { state.showModal(for: .addCarbs(override: false, mode: .meal)) }
                             label: {
                                 ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
                                     Image(systemName: "fork.knife")
@@ -252,36 +252,36 @@ extension Home {
                             }
                             .contextMenu {
                                 Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .presets)) }
+                                    state.showModal(for: .addCarbs(override: false, mode: .presets)) }
                                 label: { Label("Meal Presets", systemImage: "menucard")
                                 }
                                 Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .barcode)) }
+                                    state.showModal(for: .addCarbs(override: false, mode: .barcode)) }
                                 label: { Label("Barcode", systemImage: "barcode.viewfinder")
                                 }
                                 if state.ai {
                                     Button {
-                                        state.showModal(for: .addCarbs(editMode: false, override: false, mode: .image)) }
+                                        state.showModal(for: .addCarbs(override: false, mode: .image)) }
                                     label: { Label("AI Image Analysis", systemImage: "photo.badge.magnifyingglass")
                                     }
                                     Button {
-                                        state.showModal(for: .addCarbs(editMode: false, override: false, mode: .voice)) }
+                                        state.showModal(for: .addCarbs(override: false, mode: .voice)) }
                                     label: { Label("Voice Input", systemImage: "mic.fill")
                                     }
                                 }
                                 Button {
-                                    state.showModal(for: .addCarbs(editMode: false, override: false, mode: .meal)) }
+                                    state.showModal(for: .addCarbs(override: false, mode: .meal)) }
                                 label: { Label("Add Meal", systemImage: "birthday.cake")
                                 }
                             }
                             Spacer()
                         }
                         Button {
-                            (appUIState.bolusProgress != nil) ? showBolusActiveAlert = true :
-                                state.showModal(for: .bolus(
-                                    waitForSuggestion: state.useCalc ? true : false,
-                                    fetch: false
-                                ))
+                            if state.pumpIsBolusing() {
+                                showBolusActiveAlert = true
+                            } else {
+                                state.showModal(for: .bolus(waitForSuggestion: state.useCalc))
+                            }
                         }
                         label: {
                             Image(systemName: "syringe")
@@ -585,6 +585,10 @@ extension Home {
                                 .font(.previewNormal).foregroundStyle(.secondary)
                         } else {
                             Text("Override").font(.statusFont).foregroundStyle(.secondary)
+                        }
+                        if state.succeedingPreset != nil {
+                            Image(systemName: "person.2.fill").symbolRenderingMode(.palette).foregroundStyle(.blue, .purple)
+                                .padding(.horizontal, 2)
                         }
                     }
                 }
@@ -1069,6 +1073,7 @@ extension Home {
                 VStack(spacing: 0) {
                     // Header View
                     headerView(geo)
+                    versionBanner
                     ScrollView {
                         VStack {
                             // Main Chart
@@ -1130,11 +1135,14 @@ extension Home {
                 .onChange(of: scenePhase) {
                     if scenePhase == .active {
                         checkBuildExpiration()
+                        state.refreshVersionNotice()
                     }
                 }
             }
             .onAppear {
                 checkBuildExpiration()
+                // After the expiration check, so the chained alert binding below sees it first.
+                state.refreshVersionNotice()
             }
             .alert(
                 expirationAlertTitle,
@@ -1148,6 +1156,39 @@ extension Home {
                 }
             } message: {
                 Text(expirationAlertMessage)
+            }
+            .alert(
+                NSLocalizedString("Update available", comment: "Title of the newer-release alert on Home"),
+                // Held back while the build-expiration alert is up: two alerts flagged in the same
+                // cycle would leave one unpresented with its binding still true. Once the expiration
+                // alert is dismissed this binding turns true and the version alert follows.
+                isPresented: Binding(
+                    get: { state.showVersionAlert && !showExpirationAlert },
+                    // Acknowledged only by the buttons: SwiftUI also writes false when it tears the alert
+                    // down because the getter turned false, and that must not count as seen.
+                    set: { _ in }
+                )
+            ) {
+                Button(NSLocalizedString("Later", comment: "Dismiss the newer-release alert"), role: .cancel) {
+                    state.acknowledgeVersionAlert()
+                }
+                Button(NSLocalizedString("What's new", comment: "Open the release highlights page")) {
+                    state.acknowledgeVersionAlert()
+                    // The page leads with the releases this build has not run yet.
+                    var components = URLComponents(string: "https://open-iaps.app/whats-new")
+                    components?.queryItems = [URLQueryItem(name: "from", value: state.versionNumber)]
+                    if let url = components?.url {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            } message: {
+                Text(String(
+                    format: NSLocalizedString(
+                        "iAPS %@ is available. You are running %@. Releases carry dosing and safety fixes; see what changed before you update.",
+                        comment: "Body of the newer-release alert, %1$@ new version, %2$@ running version"
+                    ),
+                    state.newerVersion ?? "", state.versionNumber
+                ))
             }
             .navigationTitle("Home")
             .navigationBarHidden(true)
@@ -1178,6 +1219,36 @@ extension Home {
                                 }
                             }
                     )
+            }
+        }
+
+        /// A thin strip under the header while a newer release is published: tap to open
+        /// Settings (where the version line lives), × to hide it until the next release.
+        @ViewBuilder private var versionBanner: some View {
+            if state.showVersionBanner, let newer = state.newerVersion {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.circle.fill")
+                    Text(String(
+                        format: NSLocalizedString(
+                            "iAPS %@ is available. You are running %@.",
+                            comment: "Home banner, %1$@ new version, %2$@ running version"
+                        ),
+                        newer, state.versionNumber
+                    ))
+                        .font(.footnote)
+                        .lineLimit(2)
+                    Spacer()
+                    Button { state.dismissVersionBanner() } label: {
+                        Image(systemName: "xmark").font(.footnote.bold())
+                    }
+                    .accessibilityLabel(NSLocalizedString("Dismiss", comment: "Hide the newer-release banner"))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.9))
+                .foregroundColor(.white)
+                .contentShape(Rectangle())
+                .onTapGesture { state.showModal(for: .settings) }
             }
         }
 
@@ -1212,7 +1283,6 @@ private struct BolusProgressOverlay: View {
     let cancel: () -> Void
 
     @Environment(AppUIState.self) private var appUIState
-    @Environment(\.colorScheme) private var colorScheme
 
     private static let formatter = {
         let formatter = NumberFormatter()
@@ -1225,13 +1295,25 @@ private struct BolusProgressOverlay: View {
         if let progress = appUIState.bolusProgress, let amount = appUIState.bolusAmount {
             ZStack {
                 RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        colorScheme == .light ? IAPSconfig
-                            .homeViewBackgroundLight : IAPSconfig
-                            .homeViewBackgrundDark
-                    )
-                    .frame(maxWidth: 320, maxHeight: 90)
+                    .glassEffectWhenAvailable(.clear, in: RoundedRectangle(cornerRadius: 15))
+                    .frame(maxWidth: 320, maxHeight: cancelOutcome == nil ? 90 : 110)
                 bolusProgressView(progress: progress, amount: amount)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .offset(y: -100)
+        } else if let amount = appUIState.bolusStarting {
+            // the pump reports .initiating: no dose and no progress yet
+            ZStack {
+                RoundedRectangle(cornerRadius: 15)
+                    .glassEffectWhenAvailable(.clear, in: RoundedRectangle(cornerRadius: 15))
+                    .frame(maxWidth: 320, maxHeight: 50)
+                HStack {
+                    Text(NSLocalizedString("Starting bolus", comment: "Bolus progress bar title while the pump starts the bolus"))
+                    Text(amount.formatted() + NSLocalizedString(" U", comment: ""))
+                    ProgressView()
+                }
+                .frame(width: 250, height: 25).font(.bolusProgressBarFont)
+                .dynamicTypeSize(...DynamicTypeSize.large)
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .offset(y: -100)
@@ -1239,29 +1321,76 @@ private struct BolusProgressOverlay: View {
     }
 
     private func bolusProgressView(progress: Decimal, amount: Decimal) -> some View {
-        ZStack {
+        // the pump is canceling this bolus, or a cancel from iAPS is running (shown at once, before the pump reports it)
+        let canceling = appUIState.bolusCanceling || appUIState.bolusCancelInFlight
+        let outcome = cancelOutcome
+        return ZStack {
             VStack {
                 HStack {
                     let bolused = Self.formatter.string(from: (amount * progress) as NSNumber) ?? ""
-                    Text("Bolusing")
+                    if canceling {
+                        Text(NSLocalizedString(
+                            "Cancelling",
+                            comment: "Bolus progress bar title while the pump cancels the bolus"
+                        ))
+                    } else {
+                        Text("Bolusing")
+                    }
                     Text(
                         bolused + " " + NSLocalizedString("of", comment: "") + " " + amount
                             .formatted() + NSLocalizedString(" U", comment: "")
                     )
                 }.frame(width: 250, height: 25).font(.bolusProgressBarFont)
-                HStack(alignment: .bottom, spacing: 5) {
-                    ProgressView(value: Double(progress)).progressViewStyle(BolusProgressViewStyle())
-                        .overlay {
-                            Image(systemName: "pause.fill")
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, .blue)
-                                .font(.bolusProgressStopFont)
-                        }
+                VStack(spacing: 4) {
+                    HStack(alignment: .bottom, spacing: 5) {
+                        ProgressView(value: Double(progress)).progressViewStyle(BolusProgressViewStyle())
+                            .overlay {
+                                Image(systemName: "pause.fill")
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, .blue)
+                                    .font(.bolusProgressStopFont)
+                                    .opacity(appUIState.bolusCancelInFlight ? 0.4 : 1)
+                            }
+                    }
+                    if let outcome {
+                        Text(cancelOutcomeText(outcome)).font(.caption).foregroundStyle(.orange)
+                    }
                 }
+                // a tap (also on the message) clears the message and sends a fresh cancel
                 .onTapGesture { cancel() }
+                // one cancel at a time: tappable again once it has failed (APSManager drops a tap while one is running);
+                // not on a bar whose bolus has ended (only lingering): nothing to retry
+                .allowsHitTesting(!appUIState.bolusCancelInFlight && outcome?.bolusEnded != true)
             }
             .dynamicTypeSize(...DynamicTypeSize.large)
             .padding(.bottom, 8)
+        }
+    }
+
+    // never next to a newer cancel in flight (its "Cancelling" says what's going on)
+    private var cancelOutcome: BolusCancelOutcome? {
+        appUIState.bolusCancelInFlight ? nil : appUIState.bolusCancelOutcome
+    }
+
+    private func cancelOutcomeText(_ outcome: BolusCancelOutcome) -> String {
+        switch (outcome.kind, outcome.bolusEnded) {
+        case (.failed, false):
+            return NSLocalizedString("Cancel failed - tap to retry", comment: "Bolus progress bar: the bolus cancel failed")
+        case (.notConfirmed, false):
+            return NSLocalizedString(
+                "Cancel not confirmed - tap to retry",
+                comment: "Bolus progress bar: the pump didn't confirm the bolus cancel in time"
+            )
+        case (.failed, true):
+            return NSLocalizedString(
+                "Cancel failed - check the pump",
+                comment: "Bolus progress bar: the bolus cancel failed, and the bolus has ended since"
+            )
+        case (.notConfirmed, true):
+            return NSLocalizedString(
+                "Cancel not confirmed - check the pump",
+                comment: "Bolus progress bar: the pump didn't confirm the bolus cancel in time, and the bolus has ended since"
+            )
         }
     }
 }

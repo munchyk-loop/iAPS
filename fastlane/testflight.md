@@ -53,6 +53,8 @@ This is also a common step for all "browser builds", do this step only once
 1. Click "Run Workflow", and tap the green button.
 1. Wait, and within a minute or two you should see a green checkmark indicating the workflow succeeded.
 
+> iAPS needs the Time Sensitive Notifications capability on its main identifier, and the "2. Add Identifiers" workflow **cannot** enable it for you (Apple does not offer it through the API). You must tick it by hand: see [Add Time Sensitive Notifications to the iAPS Identifier](#add-time-sensitive-notifications-to-the-iaps-identifier) below. Until you do, "4. Build iAPS" stops early with `The provisioning profile for ... does not include Time Sensitive Notifications`.
+
 ## Create App Group
 
 This fork uses a dedicated **iAPS App Group**, separate from Loop's App Group. If you have already registered **iAPS App Group** with the identifier `group.com.M9J3GCND88.iaps.iaps-group`, skip to [Add App Group to Bundle Identifiers](#add-app-group-to-bundle-identifiers). Registering the group does not automatically assign it to iAPS bundle identifiers.
@@ -79,6 +81,17 @@ This fork uses a dedicated **iAPS App Group**, separate from Loop's App Group. I
 1. Click "Save".
 1. Click "Confirm".
 1. Remember to do this for each of the identifiers above.
+
+## Add Time Sensitive Notifications to the iAPS Identifier
+
+> This section is required for everyone, including people who built iAPS before. The capability lets glucose alarms, carbs-required and "iAPS not active" notifications break through Focus and Do Not Disturb. It is freely available (no request to Apple needed), but it cannot be enabled by "2. Add Identifiers", so it must be ticked manually.
+
+1. Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) on the Apple developer site.
+1. Click on the "FreeAPS" identifier (the main app, `ru.artpancreas.TEAMID.FreeAPS` unless you set a custom `APP_IDENTIFIER`). Only this identifier needs it, not the watch or LiveActivity identifiers.
+1. Scroll down the "Capabilities" list to "Time Sensitive Notifications" and tick the "Enable" box on the left.
+1. Click "Save", then "Confirm".
+
+Enabling the capability invalidates the existing provisioning profile for the main app; the build workflow normally regenerates it automatically. If "4. Build iAPS" still fails with `does not include Time Sensitive Notifications`, delete `AppStore_ru.artpancreas.TEAMID.FreeAPS.mobileprovision` from your Match-Secrets repository and build again.
 
 ## Create iAPS App in App Store Connect
 

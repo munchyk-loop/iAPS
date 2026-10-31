@@ -124,6 +124,7 @@
 		19F95FFA29F1102A00314DDC /* StatRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F95FF929F1102A00314DDC /* StatRootView.swift */; };
 		19FFF08C2FCB3457009DBC48 /* NutrientProgressBars.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FFF08B2FCB3442009DBC48 /* NutrientProgressBars.swift */; };
 		1BBB001DAD60F3B8CEA4B1C7 /* ISFEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505E09DC17A0C3D0AF4B66FE /* ISFEditorStateModel.swift */; };
+		1D6732A75D39807685D21FD3 /* CrashReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5A714FB12AC2EC42D95BB2 /* CrashReportService.swift */; };
 		1D845DF2E3324130E1D95E67 /* DataTableProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60744C3E9BB3652895C908CC /* DataTableProvider.swift */; };
 		23888883D4EA091C88480FF2 /* BolusProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19984D62EFC0035A9E9644D /* BolusProvider.swift */; };
 		28089E07169488CF6DCC2A31 /* AddCarbsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86FC1CFD647CF34508AF9A3B /* AddCarbsRootView.swift */; };
@@ -347,6 +348,7 @@
 		AA01VOICE0004000000000004 /* VoiceInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01VOICE0002000000000002 /* VoiceInputView.swift */; };
 		AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */; };
 		B7C465E9472624D8A2BE2A6A /* CalibrationsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA241FB1663EC96FDBE64C8A /* CalibrationsDataFlow.swift */; };
+		B8D4231CA9F5E67890AB0001 /* Recording in Frameworks */ = {isa = PBXBuildFile; productRef = B8D4231CA9F5E67890AB0002 /* Recording */; };
 		B9CAAEFC2AE70836000F68BC /* branch.txt in Resources */ = {isa = PBXBuildFile; fileRef = B9CAAEFB2AE70836000F68BC /* branch.txt */; };
 		BA00D96F7B2FF169A06FB530 /* CGMStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C018D1680307A31C9ED7120 /* CGMStateModel.swift */; };
 		BA90041DC8991147E5C8C3AA /* CalibrationsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500371C09F54F89A97D65FDB /* CalibrationsRootView.swift */; };
@@ -402,6 +404,7 @@
 		D6DEC113821A7F1056C4AA1E /* NightscoutConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */; };
 		D76333C9256787610B3B4875 /* AutotuneConfigStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D295A3F870E826BE371C0BB5 /* AutotuneConfigStateModel.swift */; };
 		D8DA5CD12B49EEF000C54E6C /* SlideButton in Frameworks */ = {isa = PBXBuildFile; productRef = D8DA5CD02B49EEF000C54E6C /* SlideButton */; };
+		DA1E00010000000000000002 /* DeviceAlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA1E00010000000000000001 /* DeviceAlertManager.swift */; };
 		DBA5254DBB2586C98F61220C /* ISFEditorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9F137F126D9F8DEB799F26 /* ISFEditorProvider.swift */; };
 		DD399FB31EACB9343C944C4C /* PreferencesEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA3E609094E064C99A4752C /* PreferencesEditorStateModel.swift */; };
 		E00EEC0327368630002FF094 /* ServiceAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00EEBFD27368630002FF094 /* ServiceAssembly.swift */; };
@@ -447,6 +450,12 @@
 		F22A7A8C2FF948FB0019BDC5 /* NightscoutAPIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22A7A8B2FF948FB0019BDC5 /* NightscoutAPIProvider.swift */; };
 		F22A7A932FF94FC70019BDC5 /* MetricKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22A7A912FF94FC70019BDC5 /* MetricKitService.swift */; };
 		F22A8859300058D60019BDC5 /* UIBindingOwner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22A8858300058D30019BDC5 /* UIBindingOwner.swift */; };
+		F233892E3090A9B300D6581E /* LogFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F233892D3090A9B300D6581E /* LogFileWriterTests.swift */; };
+		F23395103090E52900D6581E /* GlucoseSmoothingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F233950F3090E52900D6581E /* GlucoseSmoothingTests.swift */; };
+		F23395143091F46500D6581E /* PersistedPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23395133091F46500D6581E /* PersistedPropertyTests.swift */; };
+		F23395153091F46500D6581E /* NightscoutUploadsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23395123091F46500D6581E /* NightscoutUploadsTests.swift */; };
+		F23395163091F46500D6581E /* LiveActivityUpdateGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23395113091F46500D6581E /* LiveActivityUpdateGateTests.swift */; };
+		F233A9E03092241400D6581E /* TempTargetHBTTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F233A9DF3092241400D6581E /* TempTargetHBTTests.swift */; };
 		F23C83E030099D7D0026B83F /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23C83DF30099D790026B83F /* Profile.swift */; };
 		F23C876030099DD20026B83F /* GlucoseEntry0.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23C875F30099DCF0026B83F /* GlucoseEntry0.swift */; };
 		F23C876330099E020026B83F /* AutoIsfInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23C876230099E000026B83F /* AutoIsfInput.swift */; };
@@ -496,6 +505,9 @@
 		F28B06A83016DC9100A59FA7 /* LoopEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06A73016DC9100A59FA7 /* LoopEvent.swift */; };
 		F28B06AA3016DCB500A59FA7 /* GlucoseGap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06A93016DCB500A59FA7 /* GlucoseGap.swift */; };
 		F28B06AC3016DCF500A59FA7 /* LoopEventsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06AB3016DCF500A59FA7 /* LoopEventsStorage.swift */; };
+		F28B06AE3018FEFB00A59FA7 /* GlucoseSmoothing.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06AD3018FEF700A59FA7 /* GlucoseSmoothing.swift */; };
+		F28B06B03018FF1100A59FA7 /* KalmanFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06AF3018FF0700A59FA7 /* KalmanFilter.swift */; };
+		F28B06B2301B6E4900A59FA7 /* ExponentialFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06B1301B6E4900A59FA7 /* ExponentialFilter.swift */; };
 		F28B06B6301B77EA00A59FA7 /* LoopStatRecordStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06B5301B77E700A59FA7 /* LoopStatRecordStorage.swift */; };
 		F28B06B8301BBDC400A59FA7 /* GapDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06B7301BBDC400A59FA7 /* GapDetection.swift */; };
 		F28B06BA301BBEA400A59FA7 /* LoopGap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28B06B9301BBEA400A59FA7 /* LoopGap.swift */; };
@@ -554,6 +566,7 @@
 		F2C2EEAB2F5CCEFE00A0AA7C /* AIModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C2EEAA2F5CCEFB00A0AA7C /* AIModel.swift */; };
 		F2C2EEAD2F5CD2E400A0AA7C /* OpenFoodFactsProduct+Convert.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C2EEAC2F5CD2E100A0AA7C /* OpenFoodFactsProduct+Convert.swift */; };
 		F2C2EEAF2F5CD35C00A0AA7C /* AIAnalysisResult+Convert.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C2EEAE2F5CD35A00A0AA7C /* AIAnalysisResult+Convert.swift */; };
+		F2C44F0230230E0400EF9502 /* FootprintLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C44F0130230E0400EF9501 /* FootprintLog.swift */; };
 		F2C73D602EB6601900B700AB /* MainChartConfigRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C73D5F2EB6601900B700AB /* MainChartConfigRootView.swift */; };
 		F2C73D622EB6602D00B700AB /* MainChartConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C73D612EB6602D00B700AB /* MainChartConfigDataFlow.swift */; };
 		F2C73D642EB6603900B700AB /* MainChartConfigProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C73D632EB6603900B700AB /* MainChartConfigProvider.swift */; };
@@ -1186,10 +1199,12 @@
 		CEC751D329D88257006E9D24 /* OmniKitUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = OmniKitUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEC751D529D88262006E9D24 /* MinimedKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = MinimedKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEC751D729D88262006E9D24 /* MinimedKitUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = MinimedKitUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF5A714FB12AC2EC42D95BB2 /* CrashReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportService.swift; sourceTree = "<group>"; };
 		CFCFE0781F9074C2917890E8 /* ManualTempBasalStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManualTempBasalStateModel.swift; sourceTree = "<group>"; };
 		D0BDC6993C1087310EDFC428 /* CREditorRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CREditorRootView.swift; sourceTree = "<group>"; };
 		D295A3F870E826BE371C0BB5 /* AutotuneConfigStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AutotuneConfigStateModel.swift; sourceTree = "<group>"; };
 		D97F14812C1AFED3621165A5 /* PumpSettingsEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpSettingsEditorProvider.swift; sourceTree = "<group>"; };
+		DA1E00010000000000000001 /* DeviceAlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAlertManager.swift; sourceTree = "<group>"; };
 		DA241FB1663EC96FDBE64C8A /* CalibrationsDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalibrationsDataFlow.swift; sourceTree = "<group>"; };
 		DC2C6489D29ECCCAD78E0721 /* NotificationsConfigStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationsConfigStateModel.swift; sourceTree = "<group>"; };
 		E00EEBFD27368630002FF094 /* ServiceAssembly.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceAssembly.swift; sourceTree = "<group>"; };
@@ -1232,6 +1247,12 @@
 		F22A7A8B2FF948FB0019BDC5 /* NightscoutAPIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutAPIProvider.swift; sourceTree = "<group>"; };
 		F22A7A912FF94FC70019BDC5 /* MetricKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricKitService.swift; sourceTree = "<group>"; };
 		F22A8858300058D30019BDC5 /* UIBindingOwner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIBindingOwner.swift; sourceTree = "<group>"; };
+		F233892D3090A9B300D6581E /* LogFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogFileWriterTests.swift; sourceTree = "<group>"; };
+		F233950F3090E52900D6581E /* GlucoseSmoothingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseSmoothingTests.swift; sourceTree = "<group>"; };
+		F23395113091F46500D6581E /* LiveActivityUpdateGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityUpdateGateTests.swift; sourceTree = "<group>"; };
+		F23395123091F46500D6581E /* NightscoutUploadsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutUploadsTests.swift; sourceTree = "<group>"; };
+		F23395133091F46500D6581E /* PersistedPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistedPropertyTests.swift; sourceTree = "<group>"; };
+		F233A9DF3092241400D6581E /* TempTargetHBTTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempTargetHBTTests.swift; sourceTree = "<group>"; };
 		F23C83DF30099D790026B83F /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		F23C875F30099DCF0026B83F /* GlucoseEntry0.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseEntry0.swift; sourceTree = "<group>"; };
 		F23C876230099E000026B83F /* AutoIsfInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoIsfInput.swift; sourceTree = "<group>"; };
@@ -1281,6 +1302,9 @@
 		F28B06A73016DC9100A59FA7 /* LoopEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopEvent.swift; sourceTree = "<group>"; };
 		F28B06A93016DCB500A59FA7 /* GlucoseGap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseGap.swift; sourceTree = "<group>"; };
 		F28B06AB3016DCF500A59FA7 /* LoopEventsStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopEventsStorage.swift; sourceTree = "<group>"; };
+		F28B06AD3018FEF700A59FA7 /* GlucoseSmoothing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseSmoothing.swift; sourceTree = "<group>"; };
+		F28B06AF3018FF0700A59FA7 /* KalmanFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KalmanFilter.swift; sourceTree = "<group>"; };
+		F28B06B1301B6E4900A59FA7 /* ExponentialFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExponentialFilter.swift; sourceTree = "<group>"; };
 		F28B06B5301B77E700A59FA7 /* LoopStatRecordStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopStatRecordStorage.swift; sourceTree = "<group>"; };
 		F28B06B7301BBDC400A59FA7 /* GapDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GapDetection.swift; sourceTree = "<group>"; };
 		F28B06B9301BBEA400A59FA7 /* LoopGap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopGap.swift; sourceTree = "<group>"; };
@@ -1338,6 +1362,7 @@
 		F2C2EEAA2F5CCEFB00A0AA7C /* AIModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModel.swift; sourceTree = "<group>"; };
 		F2C2EEAC2F5CD2E100A0AA7C /* OpenFoodFactsProduct+Convert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenFoodFactsProduct+Convert.swift"; sourceTree = "<group>"; };
 		F2C2EEAE2F5CD35A00A0AA7C /* AIAnalysisResult+Convert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AIAnalysisResult+Convert.swift"; sourceTree = "<group>"; };
+		F2C44F0130230E0400EF9501 /* FootprintLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FootprintLog.swift; sourceTree = "<group>"; };
 		F2C73D5F2EB6601900B700AB /* MainChartConfigRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChartConfigRootView.swift; sourceTree = "<group>"; };
 		F2C73D612EB6602D00B700AB /* MainChartConfigDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChartConfigDataFlow.swift; sourceTree = "<group>"; };
 		F2C73D632EB6603900B700AB /* MainChartConfigProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChartConfigProvider.swift; sourceTree = "<group>"; };
@@ -1409,6 +1434,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B8D4231CA9F5E67890AB0001 /* Recording in Frameworks */,
 				D8DA5CD12B49EEF000C54E6C /* SlideButton in Frameworks */,
 				CEB434DC28B8F5B900B70274 /* MKRingProgressView.framework in Frameworks */,
 				38E87403274F78C000975559 /* libswiftCoreNFC.tbd in Frameworks */,
@@ -1983,6 +2009,7 @@
 		3811DE9125C9D88200A708ED /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CF5A714FB12AC2EC42D95BB2 /* CrashReportService.swift */,
 				F2159A552BA6238D00A0B716 /* ContactTrick */,
 				6B1A8D2C2B156EC100E76752 /* LiveActivity */,
 				CEB434E128B8F9BC00B70274 /* Bluetooth */,
@@ -2396,7 +2423,10 @@
 				FE66D16A291F74F8005D6F77 /* Bundle+Extensions.swift */,
 				CC1A00022A000002000A708ED /* BuildExpirationManager.swift */,
 				FEFFA7A12929FE49007B8193 /* UIDevice+Extensions.swift */,
+				F28B06AD3018FEF700A59FA7 /* GlucoseSmoothing.swift */,
 				CEA4F62229BE10F70011ADF7 /* SavitzkyGolayFilter.swift */,
+				F28B06AF3018FF0700A59FA7 /* KalmanFilter.swift */,
+				F28B06B1301B6E4900A59FA7 /* ExponentialFilter.swift */,
 				056EB47D2B4C8B3D00CDE36E /* SystemSoundsManager.swift */,
 				F25EBEF82FC210F8009D275F /* Date+Extensions.swift */,
 				F25EBEFA2FC21228009D275F /* TimeInterval+Extensions.swift */,
@@ -2409,6 +2439,7 @@
 				F2DE0B9530042E7D00EF9230 /* ProtectedData.swift */,
 				F28B06B7301BBDC400A59FA7 /* GapDetection.swift */,
 				F2ABE33E3033B37E001FE592 /* MemoryMetricsService.swift */,
+				F2C44F0130230E0400EF9501 /* FootprintLog.swift */,
 				F22A7A7E2FF167080019BDC5 /* DataSync */,
 			);
 			path = Helpers;
@@ -2493,6 +2524,7 @@
 		38E87406274F9AA500975559 /* UserNotifiactions */ = {
 			isa = PBXGroup;
 			children = (
+				DA1E00010000000000000001 /* DeviceAlertManager.swift */,
 				38E87407274F9AD000975559 /* UserNotificationsManager.swift */,
 			);
 			path = UserNotifiactions;
@@ -2593,6 +2625,12 @@
 			children = (
 				38FCF3F125E9028E0078B0D1 /* Info.plist */,
 				38FCF3F825E902C20078B0D1 /* FileStorageTests.swift */,
+				F233892D3090A9B300D6581E /* LogFileWriterTests.swift */,
+				F233950F3090E52900D6581E /* GlucoseSmoothingTests.swift */,
+				F23395113091F46500D6581E /* LiveActivityUpdateGateTests.swift */,
+				F23395123091F46500D6581E /* NightscoutUploadsTests.swift */,
+				F23395133091F46500D6581E /* PersistedPropertyTests.swift */,
+				F233A9DF3092241400D6581E /* TempTargetHBTTests.swift */,
 			);
 			path = FreeAPSTests;
 			sourceTree = "<group>";
@@ -3395,6 +3433,7 @@
 				3833B46C26012030003021B3 /* Algorithms */,
 				38DF1788276FC8C400B3528F /* SwiftMessages */,
 				CEB434FC28B90B7C00B70274 /* SwiftCharts */,
+				B8D4231CA9F5E67890AB0002 /* Recording */,
 				D8DA5CD02B49EEF000C54E6C /* SlideButton */,
 				F2B259E72FBF1F97008F1F22 /* AsyncAlgorithms */,
 			);
@@ -3511,6 +3550,7 @@
 				3833B46B26012030003021B3 /* XCRemoteSwiftPackageReference "swift-algorithms" */,
 				38DF1787276FC8C300B3528F /* XCRemoteSwiftPackageReference "SwiftMessages" */,
 				CEB434FB28B90B7C00B70274 /* XCRemoteSwiftPackageReference "SwiftCharts" */,
+				B8D4231CA9F5E67890AB0003 /* XCRemoteSwiftPackageReference "KSCrash" */,
 				D8DA5CCF2B49EEF000C54E6C /* XCRemoteSwiftPackageReference "SlideButton" */,
 				F2B259E62FBF1F97008F1F22 /* XCRemoteSwiftPackageReference "swift-async-algorithms" */,
 			);
@@ -3673,6 +3713,7 @@
 				F90692CF274B999A0037068D /* HealthKitDataFlow.swift in Sources */,
 				F29E5E352EE4711D00D2CBC0 /* OpenAIProtocol.swift in Sources */,
 				F2ABE33F3033B37E001FE592 /* MemoryMetricsService.swift in Sources */,
+				F2C44F0230230E0400EF9502 /* FootprintLog.swift in Sources */,
 				CE7CA3552A064973004BE681 /* ListStateIntent.swift in Sources */,
 				F2FC8B332FDDD74300D389EC /* MicronutrientSnapshot.swift in Sources */,
 				190141362CDB9D4B00ABD925 /* Token.swift in Sources */,
@@ -3773,6 +3814,7 @@
 				F291355A2F03469E00BF9F95 /* ImageCommentInputView.swift in Sources */,
 				F25D82872F619799007AE22C /* Types.swift in Sources */,
 				F23C876C30099EB00026B83F /* IobInput.swift in Sources */,
+				F28B06B2301B6E4900A59FA7 /* ExponentialFilter.swift in Sources */,
 				1920BF5D2B9DF53200E861FE /* BolusShortcut.swift in Sources */,
 				38A13D3225E28B4B00EAA382 /* PumpHistoryEvent.swift in Sources */,
 				F29E5E392EE4726A00D2CBC0 /* ClaudeProtocol.swift in Sources */,
@@ -3781,6 +3823,7 @@
 				3811DE1825C9D40400A708ED /* Router.swift in Sources */,
 				CE7950262998056D00FA576E /* CGMSetupView.swift in Sources */,
 				F2A4B7CB2E6CDF8F000E0E85 /* AppServices.swift in Sources */,
+				1D6732A75D39807685D21FD3 /* CrashReportService.swift in Sources */,
 				38A0363B25ECF07E00FCBB52 /* GlucoseStorage.swift in Sources */,
 				190EBCC629FF138000BA767D /* UIUXProvider.swift in Sources */,
 				38E98A2725F52C9300C0CED0 /* CollectionIssueReporter.swift in Sources */,
@@ -3845,6 +3888,7 @@
 				19FFF08C2FCB3457009DBC48 /* NutrientProgressBars.swift in Sources */,
 				F28B06AA3016DCB500A59FA7 /* GlucoseGap.swift in Sources */,
 				F292C1D12F5F0BF800B08D81 /* OptionalDecimalTextField.swift in Sources */,
+				F28B06B03018FF1100A59FA7 /* KalmanFilter.swift in Sources */,
 				CE7950242997D81700FA576E /* CGMSettingsView.swift in Sources */,
 				F2E8D1512F0961CC0097F482 /* FoodTagCloudView.swift in Sources */,
 				38D0B3D925EC07C400CB6E88 /* CarbsEntry.swift in Sources */,
@@ -3858,6 +3902,7 @@
 				FEB27EA62E07D9310047CB66 /* NSUserDefaults.swift in Sources */,
 				3811DE5F25C9D4D500A708ED /* ProgressBar.swift in Sources */,
 				38E87408274F9AD000975559 /* UserNotificationsManager.swift in Sources */,
+				DA1E00010000000000000002 /* DeviceAlertManager.swift in Sources */,
 				CE82E02528E867BA00473A9C /* AlertStorage.swift in Sources */,
 				38BF021D25E7E3AF00579895 /* Reservoir.swift in Sources */,
 				F299DD222FD84D840048B96A /* OverrideSnapshot.swift in Sources */,
@@ -4031,6 +4076,7 @@
 				CE7CA3542A064973004BE681 /* TempPresetsIntentRequest.swift in Sources */,
 				F292C6AB2FDDCFAA00D09D88 /* PresetsSnapshot.swift in Sources */,
 				F5F7E6C1B7F098F59EB67EC5 /* TargetsEditorDataFlow.swift in Sources */,
+				F28B06AE3018FEFB00A59FA7 /* GlucoseSmoothing.swift in Sources */,
 				5075C1608E6249A51495C422 /* TargetsEditorProvider.swift in Sources */,
 				E13B7DAB2A435F57066AF02E /* TargetsEditorStateModel.swift in Sources */,
 				F29FC35D2E7F670000DC04FE /* CoreDataManager.swift in Sources */,
@@ -4209,8 +4255,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F23395143091F46500D6581E /* PersistedPropertyTests.swift in Sources */,
+				F23395153091F46500D6581E /* NightscoutUploadsTests.swift in Sources */,
+				F23395163091F46500D6581E /* LiveActivityUpdateGateTests.swift in Sources */,
 				056EB47F2B4C8B3D00CDE36E /* SystemSoundsManager.swift in Sources */,
+				F233A9E03092241400D6581E /* TempTargetHBTTests.swift in Sources */,
+				F233892E3090A9B300D6581E /* LogFileWriterTests.swift in Sources */,
 				38FCF3F925E902C20078B0D1 /* FileStorageTests.swift in Sources */,
+				F23395103090E52900D6581E /* GlucoseSmoothingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4517,7 +4569,7 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = FreeAPS/Resources/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4569,7 +4621,7 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = FreeAPS/Resources/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4630,6 +4682,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(BUNDLE_IDENTIFIER)";
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
@@ -4674,6 +4727,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(BUNDLE_IDENTIFIER)";
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
@@ -4697,7 +4751,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
 				INFOPLIST_FILE = FreeAPSTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4718,7 +4772,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
 				INFOPLIST_FILE = FreeAPSTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4748,7 +4802,7 @@
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LiveActivity;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4782,7 +4836,7 @@
 				INFOPLIST_FILE = LiveActivity/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LiveActivity;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4882,6 +4936,14 @@
 				minimumVersion = 9.0.0;
 			};
 		};
+		B8D4231CA9F5E67890AB0003 /* XCRemoteSwiftPackageReference "KSCrash" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kstenerud/KSCrash";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
 		CEB434FB28B90B7C00B70274 /* XCRemoteSwiftPackageReference "SwiftCharts" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ivanschuetz/SwiftCharts.git";
@@ -4933,6 +4995,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 38B17B6425DD90E0005CAE3D /* XCRemoteSwiftPackageReference "SwiftDate" */;
 			productName = SwiftDate;
+		};
+		B8D4231CA9F5E67890AB0002 /* Recording */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8D4231CA9F5E67890AB0003 /* XCRemoteSwiftPackageReference "KSCrash" */;
+			productName = Recording;
 		};
 		CEB434FC28B90B7C00B70274 /* SwiftCharts */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -7,6 +7,14 @@ final class ServiceAssembly: Assembly {
     func assemble(container: Container) {
         container.register(DataMigrations.self) { _ in DataMigrations() }
 
+        container.register(CrashReportService.self) { r in
+            CrashReportService(
+                settingsManager: r.resolve(SettingsManager.self)!,
+                userToken: r.resolve(UserToken.self)!,
+                database: r.resolve(Database.self)!
+            )
+        }
+
         container.register(MetricKitService.self) { r in
             MetricKitService(
                 storage: r.resolve(FileStorage.self)!,
@@ -15,6 +23,13 @@ final class ServiceAssembly: Assembly {
         }
 
         container.register(AppCoordinator.self) { _ in AppCoordinator() }
+
+        container.register(DeviceAlertManager.self) { r in
+            BaseDeviceAlertManager(
+                alertHistoryStorage: r.resolve(AlertHistoryStorage.self)!,
+                appCoordinator: r.resolve(AppCoordinator.self)!
+            )
+        }
 
         // Foundation.NotificationCenter.default is provided to GarminManager below without resolving it;
         // if this ever needs to change - make sure to keep the GarminManager in-sync
@@ -42,6 +57,7 @@ final class ServiceAssembly: Assembly {
                 storage: r.resolve(FileStorage.self)!
             )
         }
+        container.register(UserNotificationCenterDelegate.self) { _ in UserNotificationCenterDelegate() }
         container.register(UserNotificationsManager.self) { r in
             let settingsManager = r.resolve(SettingsManager.self)!
             let glucoseStorage = r.resolve(GlucoseStorage.self)!
@@ -49,6 +65,7 @@ final class ServiceAssembly: Assembly {
             let deviceDataManager = r.resolve(DeviceDataManager.self)!
             let router = r.resolve(Router.self)!
             let appCoordinator = r.resolve(AppCoordinator.self)!
+            let deviceAlertManager = r.resolve(DeviceAlertManager.self)!
 
             return BaseUserNotificationsManager(
                 settingsManager: settingsManager,
@@ -56,7 +73,9 @@ final class ServiceAssembly: Assembly {
                 apsManager: apsManager,
                 deviceDataManager: deviceDataManager,
                 router: router,
-                appCoordinator: appCoordinator
+                appCoordinator: appCoordinator,
+                deviceAlertManager: deviceAlertManager,
+                userNotificationCenterDelegate: r.resolve(UserNotificationCenterDelegate.self)!
             )
         }
         container.register(WatchManager.self) { r in
@@ -66,7 +85,6 @@ final class ServiceAssembly: Assembly {
             let carbsStorage = r.resolve(CarbsStorage.self)!
             let tempTargetsStorage = r.resolve(TempTargetsStorage.self)!
             let garmin = r.resolve(GarminManager.self)!
-            let nightscout = r.resolve(NightscoutManager.self)!
             let appCoordinator = r.resolve(AppCoordinator.self)!
 
             return BaseWatchManager(
@@ -76,7 +94,6 @@ final class ServiceAssembly: Assembly {
                 carbsStorage: carbsStorage,
                 tempTargetsStorage: tempTargetsStorage,
                 garmin: garmin,
-                nightscout: nightscout,
                 appCoordinator: appCoordinator,
                 overrideStorage: r.resolve(OverrideStorage.self)!,
                 overrideManager: r.resolve(OverrideManager.self)!

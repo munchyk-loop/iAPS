@@ -66,7 +66,6 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
     private let carbsStorage: CarbsStorage
     private let announcementsStorage: AnnouncementsStorage
     private let deviceDataManager: DeviceDataManager
-    private let nightscout: NightscoutManager
     private let settingsManager: SettingsManager
     private let autotuneStorage: AutotuneStorage
     private let dynamicStateManager: DynamicStateManager
@@ -87,6 +86,12 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
 
     private var wasManualTempBasal = false
 
+    // one bolus cancel at a time: pump managers don't cope with overlapping cancels (DanaKit restores a captured
+    // .canceling on failure), and a second cancel never buys anything while the first one is still running
+    private var bolusCancelInFlight = false
+    // numbers the cancels sent to the pump, so a late outcome can't override a newer cancel's
+    private var bolusCancelNumber = 0
+
     private var concentration: (concentration: Double, increment: Double) {
         get async {
             await coreDataStorage.insulinConcentration()
@@ -102,7 +107,6 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
         carbsStorage: CarbsStorage,
         announcementsStorage: AnnouncementsStorage,
         deviceDataManager: DeviceDataManager,
-        nightscout: NightscoutManager,
         settingsManager: SettingsManager,
         autotuneStorage: AutotuneStorage,
         openAPS: OpenAPS,
@@ -120,7 +124,6 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
         self.carbsStorage = carbsStorage
         self.announcementsStorage = announcementsStorage
         self.deviceDataManager = deviceDataManager
-        self.nightscout = nightscout
         self.settingsManager = settingsManager
         self.autotuneStorage = autotuneStorage
         self.openAPS = openAPS
@@ -214,6 +217,7 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
             appCoordinator.setIsLooping(true)
 
             debug(.apsManager, "starting loop")
+            FootprintLog.log("loop start")
             let loopSpan = Signpost.begin("loop", poi: true)
 
             let lastStartLoopDate = Date()
@@ -276,6 +280,7 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
 
             await self.updateIOB(pumpHistory: appCoordinator.pumpHistory.value)
 
+            FootprintLog.log("loop end")
             appCoordinator.setIsLooping(false)
 
             appCoordinator.sendLoopCompleted(loopOutcome)
@@ -446,9 +451,12 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
     func makeProfiles() async throws -> (profile: Profile, pumpProfile: Profile) {
         let settings = appCoordinator.settings.value
         await overrideManager.autoCancelOverrideIfNeeded()
-        let dynamicVariables = await dynamicStateManager.dynamicVariables()
+        // one read: the HBT decision in dynamicVariables must be about the temp target the profiles get
+        let tempTargets = appCoordinator.tempTargets.value
+        let dynamicVariables = await dynamicStateManager.dynamicVariables(tempTargets: tempTargets)
         let profiles = try await openAPS.makeProfiles(
             dynamicVariables: dynamicVariables,
+            tempTargets: tempTargets,
             useAutotune: settings.useAutotune,
             settings: settings
         )
@@ -489,21 +497,56 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
     }
 
     func cancelBolus() async {
+        guard !bolusCancelInFlight else {
+            debug(.apsManager, "Cancel bolus: already in flight")
+            return
+        }
+        bolusCancelInFlight = true
+        defer {
+            bolusCancelInFlight = false
+            appCoordinator.setBolusCancelInFlight(false)
+        }
+
         await withBackgroundTask("cancel bolus") {
+            // no pump, or nothing running: nothing to cancel, and nothing to tell
+            guard let pumpStatus = deviceDataManager.currentPumpStatus(), pumpStatus.isBolusing else { return }
+            debug(.apsManager, "Cancel bolus")
+            // only now, going to the pump: "Cancelling" + a disabled stop button
+            appCoordinator.setBolusCancelInFlight(true)
+            bolusCancelNumber &+= 1
+            let number = bolusCancelNumber
+            let startedAt = Date.now
+            // the "... - tap to retry" of an earlier cancel goes away
+            deviceDataManager.bolusCancelStarted(number)
+            let cancel = Task { [deviceDataManager] in try await deviceDataManager.cancelBolus() }
             do {
-                guard let pumpStatus = deviceDataManager.currentPumpStatus() else {
-                    throw APSError.invalidPumpState(message: "Pump not set")
-                }
-                guard pumpStatus.isBolusing else { return }
-                debug(.apsManager, "Cancel bolus")
-                try await deviceDataManager.cancelBolus()
+                // Bounded for the stop button only: a cancel can take longer (Medtrum waits up to 3 min for its
+                // command lock, Omnipod/Minimed queue behind a running session), or never complete (DanaKit's
+                // ensureConnected replaces a pending connection callback). The call keeps running; a late success
+                // takes back the "not confirmed", a late failure is only logged - the bar and the pump state stay the
+                // source of truth.
+                try await withTimeout("Cancel bolus", Self.cancelBolusTimeout) { try await cancel.value }
                 debug(.apsManager, "Bolus cancelled")
+            } catch is TimeoutError {
+                debug(.apsManager, "Bolus cancellation not confirmed after \(Self.cancelBolusTimeout)")
+                deviceDataManager.showBolusCancelOutcome(.notConfirmed, cancel: number, cancelStartedAt: startedAt)
+                Task { [deviceDataManager] in
+                    let result = await cancel.result
+                    debug(.apsManager, "Bolus cancellation finished after the timeout: \(result)")
+                    if case .success = result {
+                        // its "not confirmed" (or an earlier cancel's outcome) no longer holds
+                        deviceDataManager.bolusCancelSucceeded(number)
+                    }
+                }
             } catch {
                 debug(.apsManager, "Bolus cancellation failed with error: \(error.localizedDescription)")
                 processError(APSError.pumpError(error))
+                deviceDataManager.showBolusCancelOutcome(.failed, cancel: number, cancelStartedAt: startedAt)
             }
         }
     }
+
+    private static let cancelBolusTimeout: Duration = .seconds(60)
 
     func enactTempBasal(rate: Double, duration: TimeInterval) async {
         await withBackgroundTask("enact temp basal") {
@@ -564,6 +607,8 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
     }
 
     func autotune() async -> Profile? {
+        FootprintLog.log("autotune start")
+        defer { FootprintLog.log("autotune end") }
         guard let profiles = try? await makeProfiles() else { return nil }
         let autotune = try? await openAPS.autotune(
             profile: profiles.profile,
@@ -700,7 +745,7 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
                 return
             }
 
-            let item = [CarbsEntry(
+            let item = CarbsEntry(
                 id: UUID().uuidString,
                 createdAt: date,
                 actualDate: date,
@@ -711,10 +756,9 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
                 note: "Remote",
                 enteredBy: "Nightscout operator",
                 isFPU: false
-            )]
+            )
 
-            await coreDataStorage.saveMeal(item, now: date, savedToFile: true)
-            await carbsStorage.storeCarbs(item)
+            await carbsStorage.storeMeal(item)
 
             await announcementsStorage.storeAnnouncements([announcement], enacted: true)
             debug(
@@ -724,11 +768,8 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
         case let .override(name):
             guard !name.isEmpty else { return }
 
-            // Cancel eventual current active override first
-            let currentOverrideCancelled = await overrideManager.cancelActiveOverride()
-
             if name.lowercased() == "cancel" {
-                if currentOverrideCancelled {
+                if await overrideManager.cancelActiveOverride() {
                     debug(.apsManager, "ative override canceled by announcement")
                     await announcementsStorage.storeAnnouncements([announcement], enacted: true)
                 } else {
@@ -738,15 +779,13 @@ actor BaseAPSManager: APSManager, LifetimeOwner, AppService {
                 return
             }
 
-            // Activate the new override and uplad the new ovderride to NS. Some duplicate code now. Needs refactoring.
-            guard let preset = await overrideStorage.fetchOverridePreset(name: name) else { return }
-            guard let saved = await overrideStorage.activateOverrideFromPreset(preset: preset, fromSavedPreset: true)
-            else { return }
-            await nightscout.uploadOverride(
-                name,
-                Double(preset.duration ?? 0),
-                saved.date ?? Date.now
-            )
+            // an unknown preset name leaves the active override running
+            guard let preset = await overrideStorage.fetchOverridePreset(name: name) else {
+                debug(.apsManager, "Remote Override by Announcement: no preset named \(name)")
+                return
+            }
+            // replaces the active override, if any
+            guard await overrideManager.activateOverride(preset: preset, fromSavedPreset: true) != nil else { return }
             await announcementsStorage.storeAnnouncements([announcement], enacted: true)
             debug(.apsManager, "Remote Override by Announcement succeeded.")
         }

@@ -78,14 +78,27 @@ actor BaseDatabaseManager: DatabaseManager, LifetimeOwner, AppService {
         }
     }
 
+    /// Asks open-iaps.app for the published versions, at most once an hour counted from the last
+    /// attempt. A failed request stores nothing (Database maps errors to an empty Version, which
+    /// saveVersion drops), so callers that fetch "while the stored check is stale" would otherwise
+    /// repeat the request — with its retries — on every call while the server is unreachable.
+    /// A stored check is announced through `appCoordinator.versionCheckStored`, which is how
+    /// Home learns about a check made from the loop path.
     func fetchVersion() async {
         guard isNetworkReachable else {
             return
         }
+        let defaults = UserDefaults.standard
+        let lastAttempt = defaults.object(forKey: IAPSconfig.versionCheckAttempted) as? Date ?? .distantPast
+        guard lastAttempt < Date.now.subtractingTimeInterval(.hours(1)) else { return }
+        defaults.set(Date.now, forKey: IAPSconfig.versionCheckAttempted)
         do {
             let version = try await database.fetchVersion()
             debug(.nightscout, "Version fetched from " + IAPSconfig.statURL.absoluteString)
             await coreDataStorage.saveVersion(version)
+            if !version.main.isEmpty {
+                appCoordinator.versionCheckDidStore()
+            }
         } catch {
             debug(.nightscout, error.localizedDescription)
         }
@@ -383,6 +396,9 @@ actor BaseDatabaseManager: DatabaseManager, LifetimeOwner, AppService {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
         let dateString = Self.dateFmt.string(from: yesterday)
 
+        // A rotation still waiting in the log writer's buffer would leave the day before's log_prev.txt.
+        await LogFileWriter.shared.flushAsync()
+
         guard let logData = try? Data(contentsOf: URL(fileURLWithPath: SimpleLogReporter.logFilePrev)),
               !logData.isEmpty
         else {
@@ -503,7 +519,14 @@ actor BaseDatabaseManager: DatabaseManager, LifetimeOwner, AppService {
                 start: item.start ?? 0,
                 target: item.target ?? 0,
                 uamMinutes: item.uamMinutes ?? 0,
-                autoISF: autoISF
+                autoISF: autoISF,
+                succeeding: item.succeeding,
+                endWIthNewCarbs: item.endWIthNewCarbs,
+                overrideAutoISF: item.overrideAutoISF,
+                glucoseOverrideThresholdActive: item.glucoseOverrideThresholdActive,
+                glucoseOverrideThreshold: item.glucoseOverrideThreshold,
+                glucoseOverrideThresholdActiveDown: item.glucoseOverrideThresholdActiveDown,
+                glucoseOverrideThresholdDown: item.glucoseOverrideThresholdDown
             )
         }
     }

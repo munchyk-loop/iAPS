@@ -14,8 +14,8 @@ extension Home {
         @Injected() private var deviceManager: DeviceDataManager!
         @Injected() private var overrideManager: OverrideManager!
         @Injected() private var appUIState: AppUIState!
+        @Injected() private var databaseManager: DatabaseManager!
 
-        private let coredataContext = CoreDataStack.shared.persistentContainer.viewContext
         private let coreDataStorage = CoreDataStorage()
         @Injected() private var overrideStorage: OverrideStorage!
 
@@ -47,6 +47,11 @@ extension Home {
         @Published var maxValue: Decimal = 1.2
         @Published var totalBolus: Decimal = 0
         @Published var isStatusPopupPresented: Bool = false
+        /// A published release newer than this build (from the daily version check), if any.
+        @Published var newerVersion: String?
+        @Published var showVersionBanner = false
+        @Published var showVersionAlert = false
+        let versionNumber = Bundle.main.releaseVersionNumber ?? ""
         @Published var readings: [ReadingsSnapshot] = []
         @Published var loopStatistics: (loops: Int, readings: Int, percentage: Double, averageInterval: String) = (
             loops: 0,
@@ -61,6 +66,8 @@ extension Home {
         @Published private(set) var latestOverride: OverrideSnapshot?
         // preset of the active override (nil when the override is not an existing named preset)
         @Published private(set) var overridePreset: OverridePresetsSnapshot?
+        // preset scheduled to start when the active override runs to completion
+        @Published private(set) var succeedingPreset: OverridePresetsSnapshot?
         // autoisf flag of the active override's Auto_ISF record (nil when no active override / no record)
         @Published private(set) var overrideAutoISF: Bool?
         @Published var alwaysUseColors: Bool = false
@@ -184,6 +191,13 @@ extension Home {
 
             observeUI(appCoordinator.cgmInfo, map: { $0?.sensorDays }) { me, sensorDays in
                 await me.cgmCensorDaysUpdated(sensorDays)
+            }
+
+            // refreshVersionNotice() runs from the view's onAppear, after the build-expiration check,
+            // so on a cold launch the version alert is never flagged ahead of the expiration alert.
+            // A check stored later (the loop path's daily slot) comes back through this subject.
+            observeUI(appCoordinator.versionCheckStored, dropInitial: true) { me, _ in
+                await me.versionCheckDidStore()
             }
 
             observeUI(
@@ -331,7 +345,7 @@ extension Home {
         }
 
         func addCarbs() {
-            showModal(for: .addCarbs(editMode: false, override: false, mode: .meal))
+            showModal(for: .addCarbs(override: false, mode: .meal))
         }
 
         func runLoop() {
@@ -344,6 +358,68 @@ extension Home {
             }
         }
 
+        /// Asks the pump manager, not the published pump status: time-based pump managers (Omnipod, Minimed)
+        /// don't report the end of a bolus, so the published status can stay "bolusing" until the next pump command.
+        func pumpIsBolusing() -> Bool {
+            deviceManager.currentPumpStatus()?.isBolusing ?? false
+        }
+
+        /// Recomputes the banner/alert from the stored version check. Called when Home comes up
+        /// and when the app returns to the foreground; a check stored by the loop path arrives
+        /// through `appCoordinator.versionCheckStored`, so nothing here runs on the loop path.
+        ///
+        /// A stored check older than 23 h is refreshed right away rather than waiting for the
+        /// loop's slot; DatabaseManager.fetchVersion allows one attempt an hour, success or not.
+        func refreshVersionNotice() {
+            Task {
+                let stored = await coreDataStorage.fetchVersion()
+                applyVersionNotice(stored)
+                if (stored?.date ?? .distantPast) < Date.now.subtractingTimeInterval(.hours(23)) {
+                    // A new row, if the fetch succeeds, comes back through versionCheckStored.
+                    await databaseManager.fetchVersion()
+                }
+            }
+        }
+
+        private func versionCheckDidStore() async {
+            applyVersionNotice(await coreDataStorage.fetchVersion())
+        }
+
+        private func applyVersionNotice(_ stored: VNrSnapshot?) {
+            let defaults = UserDefaults.standard
+            guard let main = stored?.nr, !main.isEmpty else {
+                newerVersion = nil
+                showVersionBanner = false
+                showVersionAlert = false
+                return
+            }
+            let offered = Version(main: main, dev: stored?.dev ?? "")
+                .offered(for: versionNumber, branch: Version.runningBranchName)
+            newerVersion = offered
+            showVersionBanner = offered != nil && defaults.string(forKey: IAPSconfig.versionBannerDismissed) != offered
+            if let offered {
+                if defaults.string(forKey: IAPSconfig.versionAlertShown) != offered {
+                    showVersionAlert = true
+                }
+            } else {
+                showVersionAlert = false
+            }
+        }
+
+        func acknowledgeVersionAlert() {
+            if let offered = newerVersion {
+                UserDefaults.standard.set(offered, forKey: IAPSconfig.versionAlertShown)
+            }
+            showVersionAlert = false
+        }
+
+        func dismissVersionBanner() {
+            if let offered = newerVersion {
+                UserDefaults.standard.set(offered, forKey: IAPSconfig.versionBannerDismissed)
+            }
+            showVersionBanner = false
+        }
+
         func cancelActiveOverride() {
             Task {
                 await overrideManager.cancelActiveOverride()
@@ -353,16 +429,7 @@ extension Home {
 
         func cancelTempTarget() {
             Task {
-                await storage.storeTempTargets([TempTarget.cancel(at: Date())])
-                let saveToCoreData = TempTargets(context: self.coredataContext)
-                saveToCoreData.active = false
-                saveToCoreData.date = Date()
-                try? self.coredataContext.save()
-
-                let setHBT = TempTargetsSlider(context: self.coredataContext)
-                setHBT.enabled = false
-                setHBT.date = Date()
-                try? self.coredataContext.save()
+                await storage.cancelTempTarget()
             }
         }
 
@@ -459,6 +526,13 @@ extension Home {
                 overridePreset = nil
                 overrideAutoISF = nil
             }
+
+            if let latestOverride, latestOverride.succeedingStart != nil, let id = latestOverride.succeeding {
+                succeedingPreset = await overrideStorage.fetchOverridePreset(id: id)
+            } else {
+                succeedingPreset = nil
+            }
+            data.succeedingOverride = succeedingPreset
         }
 
         private func setupLoopStatsBackground() {
@@ -546,19 +620,20 @@ extension Home {
 
         /// update the active temp target
         /// schedule an update on temp target activation/expiry
+        /// `tempTargets`: newest->oldest (as published by the temp targets storage)
         private func updateCurrentTempTarget(_ tempTargets: [TempTarget]) {
             tempTargetBoundaryTask?.cancel()
             tempTargetBoundaryTask = nil
 
             let now = Date()
-            let last = tempTargets.last
-            let current = last.flatMap { $0.isActive(at: now) ? $0 : nil }
+            let newest = tempTargets.first
+            let current = newest.flatMap { $0.isActive(at: now) ? $0 : nil }
             if tempTarget != current {
                 tempTarget = current
             }
 
-            guard let last, last.duration != 0 else { return }
-            let boundary = now < last.createdAt ? last.createdAt : last.endDate
+            guard let newest, newest.duration != 0 else { return }
+            let boundary = now < newest.createdAt ? newest.createdAt : newest.endDate
             guard boundary > now else { return }
 
             tempTargetBoundaryTask = Task { [weak self] in
@@ -709,7 +784,7 @@ extension Home.StateModel {
     }
 
     private func readFromSettings(_ settings: FreeAPSSettings) async {
-        data.smooth = settings.smoothGlucose
+        data.smooth = settings.glucoseSmoothing.isEnabled
 
         data.lowGlucose = settings.low
         data.highGlucose = settings.high
@@ -787,13 +862,10 @@ extension Home.StateModel {
     }
 
     private func tempTargetsUpdated(_ tempTargets: [TempTarget]) {
-        // TODO: refactor the code to assume the standard newest->oldest ordering instead
-        // chart + current-detection expect oldest -> newest
-        let tempTargets = Array(tempTargets.reversed())
-
         let now = Date()
 
-        data.tempTargets = tempTargets.filter {
+        // the chart expects oldest -> newest
+        data.tempTargets = tempTargets.reversed().filter {
             $0.createdAt.addingTimeInterval(.hours(hours)) > now
         }
         updateCurrentTempTarget(tempTargets)

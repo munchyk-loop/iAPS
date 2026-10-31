@@ -37,11 +37,6 @@ final class AppCoordinator: @unchecked Sendable {
 
     let manualTempBasal = CurrentValueSubject<Bool, Never>(false)
 
-    let pumpNotifications = PassthroughSubject<AlertEntry, Never>()
-
-    // TODO: this is never triggered?
-    let pumpNotificationsRemove = PassthroughSubject<Void, Never>()
-
     let deliveryUncertain = PassthroughSubject<Void, Never>()
 
     let deviceErrors = PassthroughSubject<Error, Never>()
@@ -99,8 +94,11 @@ final class AppCoordinator: @unchecked Sendable {
     // current temp targets, newest -> oldest
     let tempTargets = CurrentValueSubject<[TempTarget], Never>([])
 
-    let alertsUpdates = PassthroughSubject<[AlertEntry], Never>()
-
+    /// Latches once the UI is subscribed to `alertMessages`. `DeviceAlertManager` waits for it before
+    /// replaying alerts left outstanding by the previous run - a `CurrentValueSubject` rather than an
+    /// event because the two sides start in no fixed order, and a replay sent into a bus nobody is
+    /// listening to yet is simply lost.
+    let alertPresentationReady = CurrentValueSubject<Bool, Never>(false)
     let basalProfile = CurrentValueSubject<[BasalProfileEntry], Never>([])
 
     let isfSchedule = CurrentValueSubject<InsulinSensitivities, Never>(.initial)
@@ -127,11 +125,23 @@ final class AppCoordinator: @unchecked Sendable {
 
     let bolusAmount = CurrentValueSubject<Decimal?, Never>(nil)
 
+    // the pump reports .canceling for the bolus the progress bar shows (kept through the bar's linger)
+    let bolusCanceling = CurrentValueSubject<Bool, Never>(false)
+
+    // a cancel requested from iAPS is running (APSManager.cancelBolus)
+    let bolusCancelInFlight = CurrentValueSubject<Bool, Never>(false)
+
+    // the pump reports .initiating for a bolus iAPS enacted: the requested amount (standard units)
+    let bolusStarting = CurrentValueSubject<Decimal?, Never>(nil)
+
+    // how the last cancel of the bolus the bar shows went wrong (nil: nothing to tell)
+    let bolusCancelOutcome = CurrentValueSubject<BolusCancelOutcome?, Never>(nil)
+
     let newSensorDetectedEvents = PassthroughSubject<Void, Never>()
 
     let liveActivitiesSystemEnabled = CurrentValueSubject<Bool, Never>(false)
 
-    let alertMessages = PassthroughSubject<MessageContent, Never>()
+    let alertMessages = PassthroughSubject<AlertMessage, Never>()
 
     let appBecomeActiveEvents = PassthroughSubject<Void, Never>()
 
@@ -139,6 +149,13 @@ final class AppCoordinator: @unchecked Sendable {
 
     // bumped whenever override-related CoreData entities change
     let overridesChanged = CurrentValueSubject<Date, Never>(.distantPast)
+
+    // bumped whenever the temp target presets change (they are not published as temp targets)
+    let tempTargetPresetsChanged = CurrentValueSubject<Date, Never>(.distantPast)
+
+    /// Fires when DatabaseManager stores a published-versions check (the VNr table); Home
+    /// recomputes its newer-release notice from it instead of polling on the loop path.
+    let versionCheckStored = CurrentValueSubject<Date, Never>(.distantPast)
 
     // --------------
 
@@ -194,6 +211,14 @@ final class AppCoordinator: @unchecked Sendable {
         overridesChanged.send(Date())
     }
 
+    func tempTargetPresetsDidChange() {
+        tempTargetPresetsChanged.send(Date())
+    }
+
+    func versionCheckDidStore() {
+        versionCheckStored.send(Date())
+    }
+
     func setLastLoopError(_ value: (String, date: Date)?) {
         if let value {
             lastLoopError.send((error: value.0, date: value.date))
@@ -209,10 +234,6 @@ final class AppCoordinator: @unchecked Sendable {
     /// MUST BE newest -> oldest
     func setLoopEvents(_ value: [LoopEvent]) {
         loopEvents.send(value)
-    }
-
-    func sendPumpNotification(_ value: AlertEntry) {
-        pumpNotifications.send(value)
     }
 
     // make sure we have a running background task after the device data manager recommends the loop and before the actual loop starts
@@ -362,6 +383,22 @@ final class AppCoordinator: @unchecked Sendable {
         bolusAmount.send(value)
     }
 
+    func setBolusCanceling(_ value: Bool) {
+        bolusCanceling.send(value)
+    }
+
+    func setBolusCancelInFlight(_ value: Bool) {
+        bolusCancelInFlight.send(value)
+    }
+
+    func setBolusStarting(_ value: Decimal?) {
+        bolusStarting.send(value)
+    }
+
+    func setBolusCancelOutcome(_ value: BolusCancelOutcome?) {
+        bolusCancelOutcome.send(value)
+    }
+
     func restorePersistedLoopOutcome(_ value: LoopOutcome) {
         // set the current value subject, but don't publish the event
         latestLoopOutcome.send(value)
@@ -385,18 +422,34 @@ final class AppCoordinator: @unchecked Sendable {
     }
 
     func sendAlertMessage(_ value: MessageContent) {
-        alertMessages.send(value)
+        alertMessages.send(.show(value))
+    }
+
+    func sendAlertDismissalMessage(_ value: AlertIdentity) {
+        alertMessages.send(.dismiss(value))
     }
 
     func sendAppBecomeActiveEvent() {
         appBecomeActiveEvents.send(())
     }
 
-    func sendAlertUpdates(_ value: [AlertEntry]) {
-        alertsUpdates.send(value)
+    func setAlertPresentationReady() {
+        alertPresentationReady.send(true)
     }
 
     func sendNightscoutConfigChanged() {
         nightscoutConfigChanged.send()
     }
+}
+
+/// a bolus cancel that didn't go through, shown on the bolus bar until a new cancel, another bolus or the bar's clear
+struct BolusCancelOutcome: Sendable, Equatable {
+    enum Kind: Sendable, Equatable {
+        case failed // the pump refused it or the command failed
+        case notConfirmed // no answer within the timeout (the call may still complete)
+    }
+
+    let kind: Kind
+    // the bolus has ended and the bar only lingers: nothing to retry
+    let bolusEnded: Bool
 }

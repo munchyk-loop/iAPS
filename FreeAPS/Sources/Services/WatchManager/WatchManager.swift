@@ -21,7 +21,6 @@ actor BaseWatchManager: WatchManager, LifetimeOwner, AppService {
     private let carbsStorage: CarbsStorage
     private let tempTargetsStorage: TempTargetsStorage
     private let garmin: GarminManager
-    private let nightscout: NightscoutManager
     private let appCoordinator: AppCoordinator
 
     private let overrideStorage: OverrideStorage
@@ -41,7 +40,6 @@ actor BaseWatchManager: WatchManager, LifetimeOwner, AppService {
         carbsStorage: CarbsStorage,
         tempTargetsStorage: TempTargetsStorage,
         garmin: GarminManager,
-        nightscout: NightscoutManager,
         appCoordinator: AppCoordinator,
         overrideStorage: OverrideStorage,
         overrideManager: OverrideManager,
@@ -53,7 +51,6 @@ actor BaseWatchManager: WatchManager, LifetimeOwner, AppService {
         self.carbsStorage = carbsStorage
         self.tempTargetsStorage = tempTargetsStorage
         self.garmin = garmin
-        self.nightscout = nightscout
         self.appCoordinator = appCoordinator
         self.overrideStorage = overrideStorage
         self.overrideManager = overrideManager
@@ -96,6 +93,9 @@ actor BaseWatchManager: WatchManager, LifetimeOwner, AppService {
 //            // TODO:
 //        }
         observe(appCoordinator.tempTargets.dropFirst()) { me, _ in
+            await me.configureState()
+        }
+        observe(appCoordinator.tempTargetPresetsChanged.dropFirst()) { me, _ in
             await me.configureState()
         }
 //        observe(appCoordinator.carbHistoryUpdates) { me, carbs in
@@ -555,38 +555,18 @@ private extension BaseWatchManager {
         }
 
         if let tempTargetID = message.tempTarget {
-            if var preset = await tempTargetsStorage.presets().first(where: { $0.id == tempTargetID }) {
-                preset.createdAt = Date()
-                await tempTargetsStorage.storeTempTargets([preset])
+            if tempTargetID == "cancel" {
+                await tempTargetsStorage.cancelTempTarget()
                 return .confirmed
-            } else if tempTargetID == "cancel" {
-                let entry = TempTarget(
-                    name: TempTarget.cancel,
-                    createdAt: Date(),
-                    targetTop: 0,
-                    targetBottom: 0,
-                    duration: 0,
-                    enteredBy: TempTarget.manual,
-                    reason: TempTarget.cancel
-                )
-                await tempTargetsStorage.storeTempTargets([entry])
+            } else if await tempTargetsStorage.enactPreset(id: tempTargetID) != nil {
                 return .confirmed
             }
         }
 
         if let overrideID = message.override {
             if let preset = await overrideStorage.fetchOverridePreset(id: overrideID) {
-                // Cancel an active override first, if any
-                await overrideManager.cancelActiveOverride()
-
-                // Activate the new override and uplad the new ovderride to NS. Some duplicate code now.
-                guard let saved = await overrideStorage.activateOverrideFromPreset(preset: preset, fromSavedPreset: true)
+                guard await overrideManager.activateOverride(preset: preset, fromSavedPreset: true) != nil
                 else { return .denied }
-                await nightscout.uploadOverride(
-                    preset.name ?? "",
-                    Double(preset.duration ?? 0),
-                    saved.date ?? Date.now
-                )
                 await configureState()
                 return .confirmed
             } else if overrideID == "cancel" {

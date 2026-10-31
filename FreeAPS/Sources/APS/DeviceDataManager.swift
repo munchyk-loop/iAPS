@@ -10,9 +10,12 @@ import MockKitUI
 import os.log
 import SwiftDate
 import Swinject
-import UserNotifications
 
 protocol DeviceDataManager: Sendable {
+    /// the user answered a device alert, tell the device
+    func acknowledgeDeviceAlert(_ identity: AlertIdentity, recordIdentifier: String?) async
+    func acknowledgeAllDeviceAlerts() async
+
     var availableCGMManagers: [CGMManagerDescriptor] { get }
     var availablePumpManagers: [PumpManagerDescriptor] { get }
 
@@ -44,6 +47,16 @@ protocol DeviceDataManager: Sendable {
     func enactBolus(units: Decimal, automatic: Bool, concentration: Double) async throws -> Decimal
 
     func cancelBolus() async throws
+
+    /// a bolus cancel (numbered by the caller, increasing) goes to the pump: earlier cancels' outcomes go away
+    func bolusCancelStarted(_ cancel: Int)
+
+    /// shows a failed / unconfirmed cancel on the bolus bar - only if it's the latest cancel's,
+    /// and the bar still shows the bolus that was being canceled
+    func showBolusCancelOutcome(_ kind: BolusCancelOutcome.Kind, cancel: Int, cancelStartedAt: Date)
+
+    /// a cancel succeeded after all (after its timeout): its outcome, or an earlier cancel's, goes away
+    func bolusCancelSucceeded(_ cancel: Int)
 
     func suspendDelivery() async throws
 
@@ -109,7 +122,7 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
     )
 
     private let pumpHistoryStorage: PumpHistoryStorage
-    private let alertHistoryStorage: AlertHistoryStorage
+    private let deviceAlertManager: DeviceAlertManager
     private let storage: FileStorage
     private let glucoseStorage: GlucoseStorage
     private let settingsManager: SettingsManager
@@ -202,8 +215,11 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
     }
 
     private let bolusReporter: SendableVar<DoseProgressReporter?> = SendableVar(nil)
+    private let bolusBarDoseStart: SendableVar<Date?> = SendableVar(nil) // the dose the bar shows (until its clear)
     private let bolusObserver: SendableVar<DoseProgressObserver?> = SendableVar(nil)
-    private let bolusProgressClear: SendableVar<DispatchWorkItem?> = SendableVar(nil) // 0.5s delayed progress reset
+    private let bolusProgressClear: SendableVar<DispatchWorkItem?> = SendableVar(nil) // the bar's delayed (lingered) clear
+    private let bolusCancelLatest: SendableVar<Int> = SendableVar(0) // the latest cancel's number
+    private let bolusCancelOutcomeOf: SendableVar<Int?> = SendableVar(nil) // the cancel the shown outcome is for
 
     // This value is updated before each bolus is started.
     // It's only used to set appCoordinator.setBolusAmount in standard units instead of pump (adjusted) units (UI-only)
@@ -213,9 +229,14 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
     // * the bolus progress bar will show the amount in adjusted units not in standard units
     private let lastBolusConcentration = Locked<Double>(1.0)
 
+    // The amount (standard units) of the bolus iAPS is asking the pump for, shown while the pump reports .initiating
+    // (there's no dose yet). Set only until the pump answers the enactBolus call: other .initiating states
+    // (a DanaKit prime) show no "Starting bolus" label.
+    private let lastRequestedBolusAmount = Locked<Decimal?>(nil)
+
     init(
         pumpHistoryStorage: PumpHistoryStorage,
-        alertHistoryStorage: AlertHistoryStorage,
+        deviceAlertManager: DeviceAlertManager,
         storage: FileStorage,
         glucoseStorage: GlucoseStorage,
         settingsManager: SettingsManager,
@@ -227,7 +248,7 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
         loopEventsStorage: LoopEventsStorage
     ) {
         self.pumpHistoryStorage = pumpHistoryStorage
-        self.alertHistoryStorage = alertHistoryStorage
+        self.deviceAlertManager = deviceAlertManager
         self.storage = storage
         self.glucoseStorage = glucoseStorage
         self.settingsManager = settingsManager
@@ -247,6 +268,8 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
         dispatchPrecondition(condition: .onQueue(processQueue))
 
         let oldValue = self.cgmManager
+        // Read before the swap: afterwards there is no way back to the manager that is being replaced.
+        let oldIdentifier = oldValue?.pluginIdentifier
         cgmManagerLocked.mutate { $0 = cgmManager }
 
         oldValue?.cgmManagerDelegate = nil
@@ -256,16 +279,30 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
 
         rawCGMManager = cgmManager?.rawValue
         UserDefaults.standard.clearLegacyCGMManagerRawValue()
+
+        // A pump doubling as the CGM is the pump setter's business: either the pump is still there
+        // (`removePumpAsCGM`) and its alerts must stay, or it is being removed too and
+        // `setPumpManager` retracts them once it is fully gone.
+        if !(oldValue is PumpManagerUI) {
+            retractAlertsOfRemovedDevice(oldIdentifier)
+        }
     }
 
     private func setPumpManager(_ pumpManager: PumpManagerUI?) {
         dispatchPrecondition(condition: .onQueue(processQueue))
 
         let oldValue = self.pumpManager
+        // Read before the swap: afterwards there is no way back to the manager that is being replaced.
+        let oldIdentifier = oldValue?.pluginIdentifier
         pumpManagerLocked.mutate { $0 = pumpManager }
 
         oldValue?.pumpManagerDelegate = nil
         oldValue?.delegateQueue = nil
+
+        // the reporter belongs to the old manager, and the new one could report .initiating/.canceling (kept as is)
+        if oldValue !== pumpManager, bolusReporter.value != nil {
+            finishBolusReporter()
+        }
 
         // If the current CGMManager is a PumpManager, we clear it out.
         if cgmManager is PumpManagerUI {
@@ -276,6 +313,32 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
 
         rawPumpManager = pumpManager?.rawValue
         UserDefaults.standard.clearLegacyPumpManagerRawValue()
+
+        // After `setCgmManager(nil)` above, so a pump that was also the CGM is seen as fully gone.
+        // `setCgmManager` leaves the retraction of a pump-as-CGM to us, so this runs exactly once.
+        retractAlertsOfRemovedDevice(oldIdentifier)
+    }
+
+    /// A removed or replaced device will never retract its own alerts, so nothing else ever would: a
+    /// pending record is kept forever, a fired repeating one is re-armed on every launch, and
+    /// acknowledging it finds no responder. Takes them all down at the source - through the alert
+    /// manager's queue, like every other mutation.
+    ///
+    /// Nothing happens while the identifier is still in use. A pump that doubles as the CGM goes
+    /// through both setters; only `setPumpManager` calls this for it, so removing it as a CGM
+    /// (`removePumpAsCGM`) never wipes the alerts of the pump that is still there.
+    private func retractAlertsOfRemovedDevice(_ managerIdentifier: String?) {
+        dispatchPrecondition(condition: .onQueue(processQueue))
+
+        guard let managerIdentifier,
+              managerIdentifier != pumpManager?.pluginIdentifier,
+              managerIdentifier != cgmManager?.pluginIdentifier
+        else {
+            return
+        }
+
+        warning(.deviceManager, "Device '\(managerIdentifier)' is gone - retracting its outstanding alerts")
+        deviceAlertManager.retractAllAlerts(managerIdentifier: managerIdentifier)
     }
 
     // this is called on app start
@@ -297,18 +360,6 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
             setupPump()
             setupCGM()
         }
-
-        appCoordinator.alertsUpdates
-            .receive(on: processQueue)
-            .sink { [weak self] alerts in
-                guard let self else { return }
-                alerts.forEach { alert in
-                    if alert.acknowledgedDate == nil {
-                        self.ackAlert(alert: alert)
-                    }
-                }
-            }
-            .store(in: lifetime)
 
         appCoordinator.heartbeat
             .receive(on: processQueue)
@@ -754,45 +805,98 @@ final class BaseDeviceDataManager: DeviceDataManager, AppServiceSync {
 // MARK: bolus reporters
 
 extension BaseDeviceDataManager {
-    private func updateBolusReporter(isBolusing: Bool, pumpManager: PumpManager?) {
+    private func updateBolusReporter(_ bolusState: PumpManagerStatus.BolusState, pumpManager: PumpManager?) {
         dispatchPrecondition(condition: .onQueue(processQueue))
-        if isBolusing {
-            guard bolusReporter.value == nil, let pumpManager else {
-                // already tracking
+        switch bolusState {
+        case let .inProgress(dose):
+            // not (or no longer: a failed cancel) canceling
+            appCoordinator.setBolusCanceling(false)
+            if bolusReporter.value != nil {
+                // already tracking this dose
+                guard bolusBarDoseStart.value != dose.startDate else { return }
+                // a different dose (the next bolus before the previous reporter completed, a pump switch)
+                finishBolusReporter()
+            }
+            guard let pumpManager else { return }
+            startBolusReporter(pumpManager, dose: dose)
+        case .canceling:
+            // still bolusing (a cancel can fail): keep the current reporter until the pump reports .noBolus,
+            // but don't start one - there's no dose (and no amount) to report on.
+            // The label goes only on a bar of the bolus being canceled, not on a previous bolus's lingering one
+            if bolusReporter.value != nil {
+                appCoordinator.setBolusCanceling(true)
+            }
+        case .initiating:
+            // no dose yet ("Starting bolus" is published from dispatchPumpStatus): reporting starts on .inProgress,
+            // where a different dose replaces a kept reporter.
+            // A previous bolus's lingering bar goes now: "Starting bolus" takes its place, and a tap on it can't
+            // cancel the new bolus
+            if bolusReporter.value == nil, bolusProgressClear.value != nil {
+                clearBolusBar()
+            }
+        case .noBolus:
+            guard let reporter = bolusReporter.value else {
+                // with a bar still lingering, its clear resets the label (a canceled bolus stays "Cancelling" until then)
+                if bolusProgressClear.value == nil {
+                    appCoordinator.setBolusCanceling(false)
+                }
                 return
             }
-            startBolusReporter(pumpManager)
-        } else if bolusReporter.value != nil {
-            // bolus ended / pump gone
+            // bolus ended / pump gone: the status can arrive before the reporter's final progress
+            // (e.g. a reporter following pump-reported delivery), publish it before the lingered clear
+            appCoordinator.setBolusProgress(Decimal(reporter.progress.percentComplete))
+            // a cancel from iAPS whose .canceling never got here (DanaKit's connected path blocks processQueue for the
+            // whole cancel, so the live status reads .noBolus by then): keep "Cancelling" through the linger
+            if appCoordinator.bolusCancelInFlight.value {
+                appCoordinator.setBolusCanceling(true)
+            }
             finishBolusReporter()
         }
     }
 
-    private func startBolusReporter(_ pumpManager: PumpManager) {
+    private func startBolusReporter(_ pumpManager: PumpManager, dose: DoseEntry) {
         dispatchPrecondition(condition: .onQueue(processQueue))
+        // the pump can still report .inProgress after the reporter's progress is complete
+        // (e.g. a time-based estimate running ahead of the actual delivery):
+        // nothing to show then, and the pending clear of the previous reporter must be left alone
+        guard let reporter = pumpManager.createBolusProgressReporter(reportingOn: processQueue),
+              !reporter.progress.isComplete
+        else { return }
+
         bolusProgressClear.value?.cancel()
         bolusProgressClear.value = nil
+        if bolusBarDoseStart.value != dose.startDate {
+            // a cancel outcome belongs to the bolus it was for, never to another bolus's bar
+            setBolusCancelOutcome(nil)
+        }
 
-        guard let reporter = pumpManager.createBolusProgressReporter(reportingOn: processQueue) else { return }
-        let observer = BolusObserver { [weak self] percent, isComplete in
-            // invoked on processQueue (reportingOn: processQueue)
-            self?.handleBolusProgress(percent: percent, isComplete: isComplete)
+        let reporterID = ObjectIdentifier(reporter)
+        let observer = BolusObserver { [weak self] in
+            guard let self else { return }
+            // not every reporter honours reportingOn (DanaKit notifies on main): always hop to processQueue
+            self.processQueue.async { [weak self] in self?.handleBolusProgress(of: reporterID) }
         }
         bolusReporter.value = reporter
+        bolusBarDoseStart.value = dose.startDate
         bolusObserver.value = observer
 
-        if case let .inProgress(dose) = pumpManager.status.bolusState {
-            let enactedAmount = DoseEntry.fromDeviceUnits(dose.programmedUnits, concentration: lastBolusConcentration.value)
-            self.appCoordinator.setBolusAmount(enactedAmount)
-        }
+        let enactedAmount = DoseEntry.fromDeviceUnits(dose.programmedUnits, concentration: lastBolusConcentration.value)
+        appCoordinator.setBolusAmount(enactedAmount)
 
-        appCoordinator.setBolusProgress(Decimal(reporter.progress.percentComplete))
-        if reporter.progress.isComplete {
-            // bolus reporter won't call us back if we add an observer after the bolus is already done
-            finishBolusReporter()
-        } else {
-            reporter.addObserver(observer)
-        }
+        reporter.addObserver(observer)
+        // progress may have completed since the guard above, and the reporter won't call us back
+        // if the observer is added after the bolus is already done - publish (and finish) ourselves
+        let progress = reporter.progress
+        handleBolusProgress(percent: progress.percentComplete, isComplete: progress.isComplete)
+    }
+
+    private func handleBolusProgress(of reporterID: ObjectIdentifier) {
+        dispatchPrecondition(condition: .onQueue(processQueue))
+        // an update hopped before the reporter was finished or replaced must not republish after the clear;
+        // the progress is read from the current reporter, so a reused address can't publish a stale value
+        guard let reporter = bolusReporter.value, ObjectIdentifier(reporter) == reporterID else { return }
+        let progress = reporter.progress
+        handleBolusProgress(percent: progress.percentComplete, isComplete: progress.isComplete)
     }
 
     private func handleBolusProgress(percent: Double, isComplete: Bool) {
@@ -810,34 +914,91 @@ extension BaseDeviceDataManager {
         bolusReporter.value = nil
         bolusObserver.value = nil
 
-        bolusProgressClear.value?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, self.bolusReporter.value == nil else {
-                // a new bolus reported was started, don't clear
-                return
-            }
-            self.appCoordinator.setBolusProgress(nil)
-            self.appCoordinator.setBolusAmount(nil)
-            self.bolusProgressClear.value = nil
+        if let outcome = appCoordinator.bolusCancelOutcome.value {
+            // the bolus has ended: nothing to retry any more
+            appCoordinator.setBolusCancelOutcome(BolusCancelOutcome(kind: outcome.kind, bolusEnded: true))
         }
+        // a failed / unconfirmed cancel at the end of a bolus: long enough to be seen
+        scheduleBolusBarClear(after: appCoordinator.bolusCancelOutcome.value != nil ? 3 : 0.5)
+    }
+
+    private func scheduleBolusBarClear(after delay: TimeInterval) {
+        dispatchPrecondition(condition: .onQueue(processQueue))
+        bolusProgressClear.value?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.clearBolusBar() }
         bolusProgressClear.value = work
-        processQueue.asyncAfter(deadline: .now() + 0.5, execute: work)
+        processQueue.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func clearBolusBar() {
+        dispatchPrecondition(condition: .onQueue(processQueue))
+        // a new bolus reported was started, don't clear
+        guard bolusReporter.value == nil else { return }
+        bolusProgressClear.value?.cancel()
+        bolusProgressClear.value = nil
+        appCoordinator.setBolusProgress(nil)
+        appCoordinator.setBolusAmount(nil)
+        appCoordinator.setBolusCanceling(false)
+        setBolusCancelOutcome(nil)
+        bolusBarDoseStart.value = nil
+    }
+
+    private func setBolusCancelOutcome(_ outcome: BolusCancelOutcome?, of cancel: Int? = nil) {
+        dispatchPrecondition(condition: .onQueue(processQueue))
+        bolusCancelOutcomeOf.value = outcome == nil ? nil : cancel
+        appCoordinator.setBolusCancelOutcome(outcome)
+    }
+
+    func bolusCancelStarted(_ cancel: Int) {
+        processQueue.async {
+            self.bolusCancelLatest.value = cancel
+            self.setBolusCancelOutcome(nil)
+        }
+    }
+
+    func showBolusCancelOutcome(_ kind: BolusCancelOutcome.Kind, cancel: Int, cancelStartedAt: Date) {
+        processQueue.async {
+            // an earlier cancel's outcome, posted late: the newer cancel owns the bar
+            guard cancel == self.bolusCancelLatest.value else { return }
+            // no bar, or the bar of a bolus started since the cancel: nothing to show it on
+            guard let doseStart = self.bolusBarDoseStart.value, doseStart <= cancelStartedAt else { return }
+            let lingering = self.bolusReporter.value == nil
+            self.setBolusCancelOutcome(BolusCancelOutcome(kind: kind, bolusEnded: lingering), of: cancel)
+            if lingering, self.bolusProgressClear.value != nil {
+                // the bar is already lingering: let it linger long enough to be seen
+                self.scheduleBolusBarClear(after: 3)
+            }
+        }
+    }
+
+    func bolusCancelSucceeded(_ cancel: Int) {
+        processQueue.async {
+            guard let shownFor = self.bolusCancelOutcomeOf.value, shownFor <= cancel else { return }
+            self.setBolusCancelOutcome(nil)
+        }
     }
 }
 
 private final class BolusObserver: DoseProgressObserver {
-    let onUpdate: (Double, Bool) -> Void
+    let onUpdate: () -> Void
 
-    init(onUpdate: @escaping (Double, Bool) -> Void) { self.onUpdate = onUpdate }
+    init(onUpdate: @escaping () -> Void) { self.onUpdate = onUpdate }
 
-    func doseProgressReporterDidUpdate(_ reporter: DoseProgressReporter) {
-        onUpdate(reporter.progress.percentComplete, reporter.progress.isComplete)
+    func doseProgressReporterDidUpdate(_: DoseProgressReporter) {
+        onUpdate()
     }
 }
 
 // MARK: - PumpManagerDelegate
 
 extension BaseDeviceDataManager: PumpManagerDelegate {
+    /// UTC ISO-8601 for the "Pump lifecycle:" log line (pump-side event dates).
+    nonisolated(unsafe) static let lifecycleDateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     func pumpManagerPumpWasReplaced(_: PumpManager) {
         debug(.deviceManager, "pumpManagerPumpWasReplaced")
     }
@@ -970,6 +1131,23 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
             "pumpManager hasNewPumpEvents, replacePendingEvents: \(replacePendingEvents):\n\(events.map(\.rawValue.description).joined(separator: "\n"))"
         )
 
+        // Log the site / reservoir lifecycle events once more in a short, locale-free form with
+        // the pump-side date (the dump above is verbose and its titles are localized), so the
+        // uploaded logs can place pod changes, set changes and refills on every pump type.
+        for event in events {
+            switch event.type {
+            case .prime,
+                 .replaceComponent,
+                 .rewind:
+                debug(
+                    .deviceManager,
+                    "Pump lifecycle: \(event.type!.rawValue) at \(Self.lifecycleDateFormatter.string(from: event.date)) title=\(event.title)"
+                )
+            default:
+                break
+            }
+        }
+
         lastEventDate = events.map(\.date).max() ?? lastEventDate
 
         let safeCompletion = PumpEventCompletion(completion, processQueue: processQueue)
@@ -1042,32 +1220,26 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
 
 extension BaseDeviceDataManager: AlertIssuer {
     func issueAlert(_ alert: Alert) {
-        // Device alerts (pod faults, expiry, occlusion, CGM alarms) otherwise
-        // never reach the log files — only the alert-history UI storage.
-        debug(
-            .deviceManager,
-            "Device alert [\(alert.identifier.managerIdentifier)/\(alert.identifier.alertIdentifier)]: " +
-                "\(alert.backgroundContent.title) — \(alert.backgroundContent.body)"
-        )
-        let entry = AlertEntry(from: alert)
-        Task { [alertHistoryStorage] in
-            await alertHistoryStorage.storeAlert(entry)
-        }
+        deviceAlertManager.issueAlert(alert)
     }
 
     func retractAlert(identifier: Alert.Identifier) {
-        let managerIdentifier = identifier.managerIdentifier
-        let alertIdentifier = identifier.alertIdentifier
-        Task { [alertHistoryStorage] in
-            await alertHistoryStorage.deleteAlert(
-                managerIdentifier: managerIdentifier,
-                alertIdentifier: alertIdentifier
-            )
-        }
+        deviceAlertManager.retractAlert(identifier: identifier)
     }
 }
 
 extension BaseDeviceDataManager: DeviceManagerDelegate {
+    func deviceManager(_ manager: DeviceManager, recordAnalyticsEvent name: String, properties: [AnyHashable: Any]?) {
+        // OmnipodKit reports "Pod Paired" and "Pod Ended" (lifetimeHours from the pod's own clock,
+        // reason = fault / deactivated / discarded, faultCode) through this hook; LoopKit's default
+        // implementation drops them. One line per event, keys sorted so the format is stable.
+        let kv = (properties ?? [:])
+            .map { "\($0.key)=\($0.value)" }
+            .sorted()
+            .joined(separator: " ")
+        debug(.deviceManager, "Device analytics [\(manager.pluginIdentifier)] \(name): \(kv)")
+    }
+
     func deviceManager(
         _: LoopKit.DeviceManager,
         logEventForDeviceIdentifier deviceIdentifier: String?,
@@ -1131,63 +1303,114 @@ extension BaseDeviceDataManager: CGMManagerDelegate {
     func cgmManager(_: CGMManager, didUpdate _: CGMManagerStatus) {}
 }
 
-// MARK: - AlertPresenter
+// MARK: - Device alert acknowledgement
 
 extension BaseDeviceDataManager {
-//    func alertDidUpdate(_ alerts: [AlertEntry]) {
-//        alerts.forEach { alert in
-//            if alert.acknowledgedDate == nil {
-//                ackAlert(alert: alert)
-//            }
-//        }
-//    }
+    /// Must only ever be reached from a real user gesture, never automatically when an alert arrives:
+    /// on a pod this is what stops the physical beeping.
+    func acknowledgeDeviceAlert(_ identity: AlertIdentity, recordIdentifier: String? = nil) async {
+        // Captured before the device is told, and never re-read afterwards: an Omnipod round trip takes
+        // seconds, and the device may re-issue the same alert while it is in flight. Only what the user
+        // could have seen when they answered is acknowledged - a record issued after this point keeps
+        // its badge, its notification and its card.
+        var recordIdentifiers = await deviceAlertManager.outstandingAlerts()
+            .filter { $0.identity == identity }
+            .map(\.storageIdentifier)
+        if let recordIdentifier, !recordIdentifiers.contains(recordIdentifier) {
+            // A notification delivered while the app was down has no `firedDate` yet, so it is not
+            // outstanding at this point - `alertWasAcknowledged` stamps it due first.
+            recordIdentifiers.append(recordIdentifier)
+        }
+        await acknowledgeDeviceAlert(
+            identity,
+            recordIdentifiers: recordIdentifiers,
+            recordIdentifier: recordIdentifier
+        )
+    }
 
-    private func ackAlert(alert: AlertEntry) {
-        let typeMessage: MessageType
-        let alertUp = alert.alertIdentifier.uppercased()
-        if alertUp.contains("FAULT") || alertUp.contains("ERROR") {
-            typeMessage = .errorPump
-        } else {
-            typeMessage = .warning
+    func acknowledgeAllDeviceAlerts() async {
+        // `outstandingAlerts()` also returns already-acknowledged repeating alerts; skip those so we
+        // don't re-send acknowledgements the device has already received (same gate as the badge).
+        let unacknowledged = await deviceAlertManager.outstandingAlerts().filter { $0.acknowledgedDate == nil }
+        // One device call per alert, carrying that alert's records: the same alert may have several
+        // outstanding issues, and each has to be stamped.
+        let byIdentity = Dictionary(grouping: unacknowledged, by: \.identity)
+        for (identity, alerts) in byIdentity {
+            await acknowledgeDeviceAlert(
+                identity,
+                recordIdentifiers: alerts.map(\.storageIdentifier),
+                recordIdentifier: nil
+            )
+        }
+    }
+
+    private func acknowledgeDeviceAlert(
+        _ identity: AlertIdentity,
+        recordIdentifiers: [String],
+        recordIdentifier: String?
+    ) async {
+        let error = await tellDeviceAlertWasAcknowledged(identity)
+        await deviceAlertManager.alertWasAcknowledged(
+            identity,
+            recordIdentifiers: recordIdentifiers,
+            recordIdentifier: recordIdentifier,
+            failure: error?.localizedDescription
+        )
+    }
+
+    private func tellDeviceAlertWasAcknowledged(_ identity: AlertIdentity) async -> Error? {
+        var alertResponder: AlertResponder?
+        if let pumpManager = pumpManager, identity.managerIdentifier == pumpManager.pluginIdentifier {
+            alertResponder = pumpManager
+        } else if let cgmManager = cgmManager, identity.managerIdentifier == cgmManager.pluginIdentifier {
+            alertResponder = cgmManager
         }
 
-        let messageCont = MessageContent(content: alert.contentBody ?? "Unknown", type: typeMessage)
+        guard let alertResponder else {
+            // The device is gone or replaced, so nothing can be told. Returning no error acknowledges
+            // the alert locally - the user has seen it, and there is nothing to come back to.
+            warning(
+                .deviceManager,
+                "No responder for alert [\(identity.managerIdentifier)/\(identity.alertIdentifier)], acknowledged locally"
+            )
+            return nil
+        }
 
-        processQueue.async {
-            // we cannot rely on completion callback to be always called, so...
-            // present the alert and acknowledge in the storage upfront
-            // and store the error in case the manager completes with error
-            // TODO: this has been fixed in the offending device manager, clean this up
-//            self.alertHistoryStorage.ackAlert(
-//                managerIdentifier: alert.managerIdentifier,
-//                alertIdentifier: alert.alertIdentifier,
-//                error: nil
-//            )
-            self.appCoordinator.sendAlertMessage(messageCont)
-
-            var alertResponder: AlertResponder?
-            if let pumpManager = self.pumpManager, alert.managerIdentifier == pumpManager.pluginIdentifier {
-                alertResponder = pumpManager
-            } else if let cgmManager = self.cgmManager, alert.managerIdentifier == cgmManager.pluginIdentifier {
-                alertResponder = cgmManager
-            }
-            alertResponder?.acknowledgeAlert(alertIdentifier: alert.alertIdentifier) { error in
-                if let error = error {
-                    debug(.deviceManager, "acknowledge failed with error \(error.localizedDescription)")
+        // protect against the completion being called more than once
+        let once = AcknowledgementOnce()
+        return await withCheckedContinuation { continuation in
+            once.arm(continuation)
+            alertResponder.acknowledgeAlert(alertIdentifier: identity.alertIdentifier) { error in
+                guard once.finish(error) else {
+                    warning(
+                        .deviceManager,
+                        "Duplicate acknowledgement completion for alert [\(identity.managerIdentifier)/\(identity.alertIdentifier)], ignored (error: \(error?.localizedDescription ?? "none"))"
+                    )
+                    return
                 }
-
-                self.alertHistoryStorage.ackAlert(
-                    managerIdentifier: alert.managerIdentifier,
-                    alertIdentifier: alert.alertIdentifier,
-                    error: error?.localizedDescription
-                )
             }
-
-//            self.broadcaster.notify(PumpNotificationObserver.self, on: self.processQueue) {
-//                $0.pumpNotification(alert: alert)
-//            }
-            self.appCoordinator.sendPumpNotification(alert)
         }
+    }
+}
+
+/// Resumes an acknowledgement continuation exactly once, whichever thread gets there first.
+private final class AcknowledgementOnce: @unchecked Sendable {
+    private let lock = NSLock(label: "acknowledgeDeviceAlert")
+    private var continuation: CheckedContinuation<Error?, Never>?
+
+    func arm(_ continuation: CheckedContinuation<Error?, Never>) {
+        lock.perform { self.continuation = continuation }
+    }
+
+    /// Returns `true` if this call resumed the continuation, `false` if a previous call already did.
+    func finish(_ error: Error?) -> Bool {
+        let continuation: CheckedContinuation<Error?, Never>? = lock.perform {
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        guard let continuation else { return false }
+        continuation.resume(returning: error)
+        return true
     }
 }
 
@@ -1290,19 +1513,21 @@ private extension BaseDeviceDataManager {
     private func dispatchPumpStatus() {
         guard let pumpManager = self.pumpManager else {
             appCoordinator.setPumpStatus(nil)
-            updateBolusReporter(isBolusing: false, pumpManager: nil)
+            appCoordinator.setBolusStarting(nil)
+            updateBolusReporter(.noBolus, pumpManager: nil)
             appCoordinator.setManualTempBasal(false)
             return
         }
 
-        let status = pumpStatus(for: pumpManager)
+        // one read: the published isBolusing and the reporter must agree on the bolus state
+        let pumpManagerStatus = pumpManager.status
+        let status = pumpStatus(for: pumpManager, status: pumpManagerStatus)
         appCoordinator.setPumpStatus(status)
 
-        if case .inProgress = pumpManager.status.bolusState {
-            updateBolusReporter(isBolusing: true, pumpManager: pumpManager)
-        } else {
-            updateBolusReporter(isBolusing: false, pumpManager: pumpManager)
-        }
+        let bolusState = pumpManagerStatus.bolusState
+        updateBolusReporter(bolusState, pumpManager: pumpManager)
+        // after the reporter's progress and amount: "Starting bolus" goes when the bar can take its place
+        appCoordinator.setBolusStarting(bolusState == .initiating ? lastRequestedBolusAmount.value : nil)
 
         appCoordinator.setManualTempBasal(KnownPlugins.isManualTempBasalActive(pumpManager) ?? false)
     }
@@ -1434,8 +1659,15 @@ extension BaseDeviceDataManager {
         // convert automatic
         let automaticValue = automatic ? BolusActivationType.automatic : BolusActivationType.manualRecommendationAccepted
 
+        lastRequestedBolusAmount.value = DoseEntry.fromDeviceUnits(
+            unitsAdjustedForConcentrationAndRounded,
+            concentration: concentration
+        )
+
         return try await withCheckedThrowingContinuation { continuation in
             pump.enactBolus(units: unitsAdjustedForConcentrationAndRounded, activationType: automaticValue) { error in
+                // the pump has answered: .initiating is over for this request
+                self.lastRequestedBolusAmount.value = nil
                 if let error = error {
                     debug(
                         .apsManager,
@@ -1599,14 +1831,13 @@ extension BaseDeviceDataManager {
         }
     }
 
-    private func pumpStatus(for pumpManager: PumpManagerUI) -> PumpDisplayStatus? {
-        let pumpManagerStatus = pumpManager.status
+    private func pumpStatus(for pumpManager: PumpManagerUI, status pumpManagerStatus: PumpManagerStatus) -> PumpDisplayStatus? {
         let batteryPercent = Int((pumpManagerStatus.pumpBatteryChargeRemaining ?? 1) * 100)
         let battery = Battery(
             percent: batteryPercent,
             voltage: nil,
             string: batteryPercent >= 10 ? .normal : .low,
-            display: pumpManager.status.pumpBatteryChargeRemaining != nil
+            display: pumpManagerStatus.pumpBatteryChargeRemaining != nil
         )
 
         let isBolusing = pumpManagerStatus.bolusState != .noBolus
@@ -1631,7 +1862,7 @@ extension BaseDeviceDataManager {
 
     func currentPumpStatus() -> PumpDisplayStatus? {
         guard let pumpManager else { return nil }
-        return pumpStatus(for: pumpManager)
+        return pumpStatus(for: pumpManager, status: pumpManager.status)
     }
 }
 
